@@ -12,6 +12,18 @@ const C_MPS = 299_792_458;
 
 const DEFAULT_MAP_URL = "https://commons.wikimedia.org/wiki/Special:Redirect/file/Equirectangular-projection.jpg?width=2048";
 const DEFAULT_MAP_ATTRIBUTION = "Wikimedia Commons: Equirectangular-projection.jpg / NASA imagery derivative";
+const GITHUB_REPOSITORY_URL = "https://github.com/FujimotoShota-toruca/satpass-ops-console";
+const CONFIG_STORAGE_KEYS = [
+  "web-orbitron:config-yaml-v14",
+  "web-orbitron:config-yaml-v13",
+  "web-orbitron:config-yaml-v12",
+  "web-orbitron:config-yaml-v11",
+  "web-orbitron:config-yaml-v10",
+  "web-orbitron:config-yaml-v9",
+  "web-orbitron:config-yaml-v8",
+  "web-orbitron:config-yaml-v7",
+  "web-orbitron:config-yaml-v6",
+];
 
 
 const DEFAULT_TLE_SOURCES_TEXT = `# name@url 形式で1行1件を指定します。http://celestrak.org はブラウザ混在コンテンツ対策として https に補正します。
@@ -470,7 +482,7 @@ function dumpYaml(config) {
 }
 
 function buildTemplateYaml() {
-  return `# SatPass Ops Console 設定例 v13
+  return `# SatPass Ops Console 設定例 v14
 # 1ファイル運用も、分割YAML運用も可能です。
 # 分割する場合は、ground_stations.yaml / satellites.yaml / doppler.yaml / settings.yaml / map.yaml / radar.yaml / orbit_track.yaml を
 # Import YAML(s)/JSON で複数選択してください。
@@ -1624,7 +1636,7 @@ function ViewModeSelector({ viewMode, onChange }) {
 function App() {
   const [initialConfig] = useState(() => {
     try {
-      const saved = localStorage.getItem("web-orbitron:config-yaml-v13") || localStorage.getItem("web-orbitron:config-yaml-v12") || localStorage.getItem("web-orbitron:config-yaml-v11") || localStorage.getItem("web-orbitron:config-yaml-v10") || localStorage.getItem("web-orbitron:config-yaml-v9") || localStorage.getItem("web-orbitron:config-yaml-v8") || localStorage.getItem("web-orbitron:config-yaml-v7") || localStorage.getItem("web-orbitron:config-yaml-v6");
+      const saved = CONFIG_STORAGE_KEYS.map((key) => localStorage.getItem(key)).find(Boolean);
       return saved ? normalizeConfig(yaml.load(saved)) : normalizeConfig(DEFAULT_RAW_CONFIG);
     } catch {
       return normalizeConfig(DEFAULT_RAW_CONFIG);
@@ -1664,7 +1676,7 @@ function App() {
   );
 
   useEffect(() => {
-    localStorage.setItem("web-orbitron:config-yaml-v13", dumpYaml(currentConfig));
+    localStorage.setItem("web-orbitron:config-yaml-v14", dumpYaml(currentConfig));
   }, [currentConfig]);
 
   useEffect(() => {
@@ -1758,6 +1770,19 @@ function App() {
 
   function exportYaml() {
     downloadText("web-orbitron-config.yaml", dumpYaml(currentConfig), "application/x-yaml");
+  }
+
+  function clearLocalConfig() {
+    const ok = window.confirm(
+      "ブラウザ内に保存された SatPass Ops Console の設定を削除します。現在の画面表示は維持されますが、再読み込み後はデフォルト設定に戻ります。続行しますか？"
+    );
+    if (!ok) return;
+    CONFIG_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
+    setConfigMessage("ブラウザ内の保存設定を削除しました。現在の画面状態を残したい場合は Export YAML で保存してください。");
+  }
+
+  function openGitHubRepository() {
+    window.open(GITHUB_REPOSITORY_URL, "_blank", "noopener,noreferrer");
   }
 
   function downloadTemplate() {
@@ -1951,6 +1976,7 @@ function App() {
         <div className="top-actions runtime-actions">
           <button className="button primary" onClick={() => setRunning((v) => !v)}>{running ? "Pause" : "Run"}</button>
           <button className="button" onClick={() => setClockNow(new Date())}>Now</button>
+          <button className="button github-button" onClick={openGitHubRepository}>GitHub</button>
           <label className="offset-control">Offset min<input type="number" step="1" value={timeOffsetMinutes} onChange={(e) => setTimeOffsetMinutes(e.target.value)} /></label>
           <button className="button" onClick={() => setTimeOffsetMinutes(0)}>Offset 0</button>
         </div>
@@ -2117,11 +2143,14 @@ function App() {
               <button className="button compact" onClick={downloadTemplate}>Template YAML</button>
               <button className="button compact" onClick={downloadTleSourceTemplate}>TLE URL YAML</button>
               <button className="button compact" onClick={exportYaml}>Export YAML</button>
+              <button className="button compact danger" onClick={clearLocalConfig}>Clear Local Config</button>
+              <button className="button compact github-button" onClick={openGitHubRepository}>GitHub</button>
               <label className="button compact file-button">
                 Import YAML(s)/JSON
                 <input type="file" multiple accept=".yaml,.yml,.json,application/x-yaml,application/json" onChange={importConfigFile} />
               </label>
             </div>
+            <p className="privacy-note">YAML/ローカル画像はブラウザ内で処理されます。外部通信はTLE取得URL・外部地図/背景画像URLへのGETリクエストが中心です。</p>
           </div>
         </section>
 
@@ -2136,6 +2165,7 @@ function App() {
             <button className="button" onClick={syncEditorFromCurrent}>Sync Current</button>
             <button className="button" onClick={downloadTemplate}>Download Template</button>
             <button className="button" onClick={downloadTleSourceTemplate}>Download TLE URL YAML</button>
+            <button className="button danger" onClick={clearLocalConfig}>Clear Local Config</button>
           </div>
           <textarea className="config-textarea mono" spellCheck="false" value={configText} onChange={(e) => setConfigText(e.target.value)} aria-label="YAML configuration editor" />
         </details>

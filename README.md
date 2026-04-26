@@ -312,3 +312,29 @@ orbit_track:
 - Pin `satellite.js` to `5.0.0` to avoid the newer WASM/pthreads build path being pulled into Vite production builds.
 - Pin Vite/React/js-yaml/jszip versions instead of using `latest`, so GitHub Pages/Netlify builds are reproducible.
 - If an older `package-lock.json` exists, delete `node_modules` and `package-lock.json`, then run `npm install` again.
+
+## Privacy / Data Flow
+
+このアプリは静的フロントエンドアプリとして動作します。バックエンドサーバ、DB、ログイン機能、テレメトリ収集機能は含めていません。
+
+ローカルPCから読み込んだ YAML、画面上で編集した YAML、ローカルからアップロードした地図画像・スカイライン画像、生成した Doppler CSV ZIP は、基本的にブラウザ内で処理されます。これらをアプリ側からGitHubや外部サーバへアップロードする処理は入れていません。
+
+ただし、次の場合は外部通信が発生します。
+
+- `Fetch / Update TLE` を押した場合、`tle_sources` や `satellites[].tle_url` に書かれたTLE取得URLへブラウザからGETリクエストを送ります。
+- `map.background_image_url` に外部画像URLを指定した場合、その地図画像をブラウザが読み込みます。
+- `radar.background_image_url` に外部画像URLを指定した場合、その背景画像をブラウザが読み込みます。
+- `GitHub` ボタンを押した場合、GitHubリポジトリを別タブで開きます。
+
+現在の設定は再読み込み後も復元できるように、ブラウザの `localStorage` に保存されます。これはPC・ブラウザプロファイル内の保存であり、外部サーバ保存ではありません。ただし、共用PCでは同じブラウザを使う別ユーザーに設定が見える可能性があります。
+
+画面内の `Clear Local Config` ボタンを押すと、SatPass Ops Console が保存した `localStorage` の設定キーを削除できます。削除前に現在設定を残したい場合は `Export YAML` を使ってください。
+
+詳細は `docs/PRIVACY_DATA_FLOW.md` を参照してください。
+
+## v0.14.0
+
+- アプリ画面からGitHubリポジトリを開ける `GitHub` ボタンを追加
+- ブラウザ内に保存された設定を削除する `Clear Local Config` ボタンを追加
+- README と `docs/PRIVACY_DATA_FLOW.md` にデータフローと外部通信範囲を明記
+- localStorage 保存キーを `web-orbitron:config-yaml-v14` に更新し、旧キーも読み込み対象に維持

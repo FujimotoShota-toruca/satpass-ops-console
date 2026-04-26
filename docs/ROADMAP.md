@@ -99,3 +99,9 @@
 - Pin `satellite.js` to `5.0.0` to avoid the newer WASM/pthreads build path being pulled into Vite production builds.
 - Pin Vite/React/js-yaml/jszip versions instead of using `latest`, so GitHub Pages/Netlify builds are reproducible.
 - If an older `package-lock.json` exists, delete `node_modules` and `package-lock.json`, then run `npm install` again.
+
+## v0.14.0
+
+- Added in-app GitHub repository link.
+- Added `Clear Local Config` to remove saved localStorage configuration.
+- Added privacy/data-flow documentation for YAML import, local images, TLE URL fetches, external background images, and generated CSV ZIP files.
