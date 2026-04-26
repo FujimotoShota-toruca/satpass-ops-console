@@ -688,25 +688,28 @@ function formatYmdInZone(date, timeZone) {
   return `${p.year}-${pad2(p.month)}-${pad2(p.day)}`;
 }
 
-function predictionStartDateFromMode(now, timeZone, mode) {
-  const selected = safeString(mode, "today").toLowerCase();
-  if (selected === "today") {
-    const today = formatYmdInZone(now, timeZone);
-    return parseObservationStartUtc(today, timeZone);
+function isOneDayMode(mode) {
+  const selected = safeString(mode, "1day").toLowerCase();
+  return selected === "1day" || selected === "day" || selected === "today";
+}
+
+function predictionStartDateFromMode(now, timeZone, mode, passDate) {
+  if (isOneDayMode(mode)) {
+    const targetDate = passDate || formatYmdInZone(now, timeZone);
+    return parseObservationStartUtc(targetDate, timeZone);
   }
   return now;
 }
 
 function predictionHorizonHoursFromMode(now, timeZone, mode) {
-  const selected = safeString(mode, "today").toLowerCase();
-  if (selected === "today") return 24;
+  const selected = safeString(mode, "1day").toLowerCase();
+  if (isOneDayMode(selected)) return 24;
   return clamp(safeNumber(selected.replace("h", ""), 12), 0.25, 168);
 }
 
-function predictionHorizonLabel(mode, hours) {
-  const selected = safeString(mode, "today").toLowerCase();
-  if (selected === "today") return "today / 00:00-24:00";
-  return `${hours.toFixed(0)} h`;
+function predictionHorizonLabel(mode, hours, passDate = null) {
+  if (isOneDayMode(mode)) return `1Day / ${passDate || "selected date"} 00:00-24:00`;
+  return `${hours.toFixed(0)} h from now`;
 }
 
 function formatMonthDayInZone(date, timeZone) {
@@ -768,14 +771,44 @@ function formatDuration(ms) {
   return `${sign}${days > 0 ? `${days}d ` : ""}${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`;
 }
 
-function buildPassTimer(passes, now, timeZone) {
+function buildPassTimer(passes, now, timeZone, selectedPass = null, selectedLabel = null) {
+  if (selectedPass) {
+    const prefix = selectedLabel ? `${selectedLabel} / ` : "selected / ";
+    if (now < selectedPass.aos) {
+      return {
+        phase: "AOS",
+        value: formatDuration(selectedPass.aos.getTime() - now.getTime()),
+        sub: `${prefix}to AOS ${formatIsoInZone(selectedPass.aos, timeZone)}`,
+        inPass: false,
+        selected: true,
+      };
+    }
+    if (now <= selectedPass.los) {
+      return {
+        phase: "LOS",
+        value: formatDuration(selectedPass.los.getTime() - now.getTime()),
+        sub: `${prefix}to LOS ${formatIsoInZone(selectedPass.los, timeZone)}`,
+        inPass: true,
+        selected: true,
+      };
+    }
+    return {
+      phase: "DONE",
+      value: "00:00:00",
+      sub: `${prefix}ended ${formatIsoInZone(selectedPass.los, timeZone)}`,
+      inPass: false,
+      selected: true,
+    };
+  }
+
   const active = passes.find((pass) => now >= pass.aos && now <= pass.los);
   if (active) {
     return {
       phase: "LOS",
       value: formatDuration(active.los.getTime() - now.getTime()),
-      sub: `to LOS ${formatIsoInZone(active.los, timeZone)}`,
+      sub: `auto / to LOS ${formatIsoInZone(active.los, timeZone)}`,
       inPass: true,
+      selected: false,
     };
   }
   const next = passes.find((pass) => pass.aos > now) || passes[0];
@@ -783,11 +816,12 @@ function buildPassTimer(passes, now, timeZone) {
     return {
       phase: "AOS",
       value: formatDuration(next.aos.getTime() - now.getTime()),
-      sub: `to AOS ${formatIsoInZone(next.aos, timeZone)}`,
+      sub: `auto / to AOS ${formatIsoInZone(next.aos, timeZone)}`,
       inPass: false,
+      selected: false,
     };
   }
-  return { phase: "AOS", value: "--:--:--", sub: "no pass in prediction window", inPass: false };
+  return { phase: "AOS", value: "--:--:--", sub: "no pass in prediction window", inPass: false, selected: false };
 }
 
 function computeSatState(tle, date) {
@@ -1518,15 +1552,6 @@ function WorldMap({ satellites, stations, now, appConfig, mapConfig, orbitTrackC
         })}
       </g>
 
-      <g className="track-legend">
-        <rect x={width - 306} y="14" width="292" height="30" rx="10" className="track-legend-bg" />
-        <circle cx={width - 286} cy="29" r="4" fill={orbitTrackConfig?.sunlitColor || "#22c55e"} />
-        <text x={width - 278} y="33" className="track-legend-text">SUNLIT</text>
-        <circle cx={width - 206} cy="29" r="4" fill={orbitTrackConfig?.penumbraColor || "#f59e0b"} />
-        <text x={width - 198} y="33" className="track-legend-text">PENUMBRA</text>
-        <circle cx={width - 108} cy="29" r="4" fill={orbitTrackConfig?.umbraColor || "#7c3aed"} />
-        <text x={width - 100} y="33" className="track-legend-text">UMBRA</text>
-      </g>
       <text x="18" y="28" className="map-caption">{projection} map / night-side shading / {mapConfig.attribution || "background image supported"}</text>
     </svg>
   );
@@ -1561,34 +1586,67 @@ function DopplerOutputPanel({ csvDate, onCsvDateChange, onExportZip, exporting, 
   );
 }
 
-function PassTable({ passes, horizonHours, passWindowMode, onPassWindowModeChange, timeZone, selectedPassIndices = [], onSelectPass, onCopyPassText }) {
+function MapOrbitLegend({ orbitTrackConfig }) {
+  return (
+    <div className="map-orbit-legend" aria-label="Orbit track legend">
+      <span className="muted tiny">Orbit track</span>
+      <span className="map-legend-item"><i style={{ background: orbitTrackConfig?.sunlitColor || "#22c55e" }} /> SUNLIT</span>
+      <span className="map-legend-item"><i style={{ background: orbitTrackConfig?.penumbraColor || "#f59e0b" }} /> PENUMBRA</span>
+      <span className="map-legend-item"><i style={{ background: orbitTrackConfig?.umbraColor || "#7c3aed" }} /> UMBRA</span>
+      <span className="muted tiny">Legend is outside the map canvas.</span>
+    </div>
+  );
+}
+
+function PassTable({
+  passes,
+  horizonHours,
+  passWindowMode,
+  onPassWindowModeChange,
+  passDate,
+  onPassDateChange,
+  timeZone,
+  selectedPassIndices = [],
+  selectedOperationPassIndex = null,
+  onSelectPass,
+  onSelectOperationPass,
+  onCopyPassText,
+}) {
   const selectedSet = new Set(selectedPassIndices);
+  const isDay = isOneDayMode(passWindowMode);
   return (
     <section className="panel pass-panel">
       <div className="panel-title-row">
-        <h2>Next Visible Passes</h2>
+        <h2>Visible Passes</h2>
         <div className="panel-actions-inline pass-tools">
           <label className="inline-control">
             Window
             <select value={passWindowMode} onChange={(e) => onPassWindowModeChange?.(e.target.value)}>
-              <option value="today">Today</option>
+              <option value="1day">1Day</option>
               <option value="12">12h</option>
               <option value="24">24h</option>
               <option value="48">48h</option>
               <option value="72">72h</option>
             </select>
           </label>
+          {isDay ? (
+            <label className="inline-control">
+              Date
+              <input type="date" value={passDate} onChange={(e) => onPassDateChange?.(e.target.value)} />
+            </label>
+          ) : null}
           <button className="button compact" type="button" onClick={onCopyPassText}>Text Copy</button>
-          <span className="muted small">row click: radar plot select / unselect</span>
-          <span className="muted small">{predictionHorizonLabel(passWindowMode, horizonHours)}</span>
+          <span className="muted small">Ops: timer target / Radar: plot select</span>
+          <span className="muted small">{predictionHorizonLabel(passWindowMode, horizonHours, passDate)}</span>
         </div>
       </div>
       {passes.length === 0 ? (
-        <p className="muted">No visible pass in the prediction window.</p>
+        <p className="muted">No visible pass in the selected prediction window.</p>
       ) : (
         <table>
           <thead>
             <tr>
+              <th>Ops</th>
               <th>Radar</th>
               <th>AOS</th>
               <th>MaxEL Time</th>
@@ -1599,10 +1657,25 @@ function PassTable({ passes, horizonHours, passWindowMode, onPassWindowModeChang
           </thead>
           <tbody>
             {passes.map((pass, i) => {
-              const selected = selectedSet.has(i);
+              const radarSelected = selectedSet.has(i);
+              const opsSelected = selectedOperationPassIndex === i;
+              const rowClass = [radarSelected ? "selected-pass-row" : "clickable-pass-row", opsSelected ? "operation-pass-row" : ""].filter(Boolean).join(" ");
               return (
-                <tr key={i} className={selected ? "selected-pass-row" : "clickable-pass-row"} onClick={() => onSelectPass?.(i)}>
-                  <td>{selected ? "SELECTED" : `#${i + 1}`}</td>
+                <tr key={i} className={rowClass} onClick={() => onSelectPass?.(i)}>
+                  <td>
+                    <button
+                      type="button"
+                      className={opsSelected ? "mini-pill selected" : "mini-pill"}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onSelectOperationPass?.(i);
+                      }}
+                      title="Select as next operation pass for PASS TIMER"
+                    >
+                      {opsSelected ? "OPS" : `#${i + 1}`}
+                    </button>
+                  </td>
+                  <td>{radarSelected ? "PLOT" : `#${i + 1}`}</td>
                   <td>{formatIsoInZone(pass.aos, timeZone)}</td>
                   <td>{formatIsoInZone(pass.maxElTime, timeZone)}</td>
                   <td>{formatIsoInZone(pass.los, timeZone)}</td>
@@ -1711,7 +1784,9 @@ function App() {
   const [exporting, setExporting] = useState(false);
   const [viewMode, setViewMode] = useState("split");
   const [pinnedPassIndices, setPinnedPassIndices] = useState([]);
-  const [passWindowMode, setPassWindowMode] = useState("today");
+  const [selectedOperationPassIndex, setSelectedOperationPassIndex] = useState(null);
+  const [passWindowMode, setPassWindowMode] = useState("1day");
+  const [passDate, setPassDate] = useState(() => formatYmdInZone(new Date(), initialConfig.ops.timezone || "Asia/Tokyo"));
   const [csvDate, setCsvDate] = useState(() => formatYmdInZone(new Date(), initialConfig.ops.timezone || "Asia/Tokyo"));
 
   const selectedSat = satellites.find((s) => s.id === selectedSatId) ?? satellites[0];
@@ -1745,7 +1820,8 @@ function App() {
 
   useEffect(() => {
     setPinnedPassIndices([]);
-  }, [selectedSatId, selectedStationId, passWindowMode]);
+    setSelectedOperationPassIndex(null);
+  }, [selectedSatId, selectedStationId, passWindowMode, passDate]);
 
   const selectedState = selectedSat ? computeSatState(selectedSat, now) : null;
   const look = selectedState && selectedStation ? computeLookAngles(selectedState, selectedStation) : null;
@@ -1755,11 +1831,18 @@ function App() {
   const groundLight = selectedStation ? computeGroundLightStatus(selectedStation, now) : { mode: "--", solarElevationDeg: null };
   const predictionTimeKey = Math.floor(now.getTime() / 60000);
   const effectivePredictionHorizonHours = predictionHorizonHoursFromMode(now, opsConfig.timezone || "Asia/Tokyo", passWindowMode);
-  const predictionStartDate = useMemo(() => predictionStartDateFromMode(now, opsConfig.timezone || "Asia/Tokyo", passWindowMode), [predictionTimeKey, opsConfig.timezone, passWindowMode]);
+  const predictionStartDate = useMemo(() => predictionStartDateFromMode(now, opsConfig.timezone || "Asia/Tokyo", passWindowMode, passDate), [predictionTimeKey, opsConfig.timezone, passWindowMode, passDate]);
   const passes = useMemo(() => {
     if (!selectedSat || !selectedStation) return [];
     return predictPasses(selectedSat, selectedStation, predictionStartDate, effectivePredictionHorizonHours, safeNumber(appConfig.predictionStepSec, 30));
   }, [selectedSat, selectedStation, predictionStartDate, effectivePredictionHorizonHours, appConfig.predictionStepSec]);
+
+  useEffect(() => {
+    if (selectedOperationPassIndex !== null && !passes[selectedOperationPassIndex]) {
+      setSelectedOperationPassIndex(null);
+    }
+  }, [passes, selectedOperationPassIndex]);
+
   const activePassIndex = passes.findIndex((pass) => now >= pass.aos && now <= pass.los);
   const activePass = activePassIndex >= 0 ? passes[activePassIndex] : null;
   const autoRadarPass = activePass || passes.find((pass) => pass.aos > now) || passes[0];
@@ -1787,7 +1870,14 @@ function App() {
       .filter(Boolean);
   }, [displayedSatellites, selectedStation, selectedSat, now]);
   const radarPassLegendItems = radarPassSeries.map((series) => `${series.label} AOS ${formatIsoInZone(series.pass.aos, opsConfig.timezone || "Asia/Tokyo")} / MaxEL ${series.pass.maxElDeg.toFixed(1)} deg`);
-  const passTimer = buildPassTimer(passes, now, opsConfig.timezone || "Asia/Tokyo");
+  const selectedOperationPass = Number.isInteger(selectedOperationPassIndex) ? passes[selectedOperationPassIndex] : null;
+  const passTimer = buildPassTimer(
+    passes,
+    now,
+    opsConfig.timezone || "Asia/Tokyo",
+    selectedOperationPass,
+    selectedOperationPass ? `OPS #${selectedOperationPassIndex + 1}` : null
+  );
 
   function applyNormalizedConfig(config) {
     setAppConfig(config.app);
@@ -1983,6 +2073,10 @@ function App() {
     setPinnedPassIndices((prev) => prev.includes(index) ? prev.filter((item) => item !== index) : [...prev, index].sort((a, b) => a - b));
   }
 
+  function toggleOperationPass(index) {
+    setSelectedOperationPassIndex((prev) => prev === index ? null : index);
+  }
+
   async function copyPassTableText() {
     const text = buildPassCopyText(passes, opsConfig.timezone || "Asia/Tokyo");
     try {
@@ -2080,6 +2174,7 @@ function App() {
 
         {viewMode !== "radar" ? (
           <div className="panel map-panel" onDoubleClick={() => setViewMode(viewMode === "map" ? "split" : "map")}>
+            <MapOrbitLegend orbitTrackConfig={orbitTrackConfig} />
             <WorldMap satellites={displayedSatellites} stations={stations} now={now} appConfig={appConfig} mapConfig={mapConfig} orbitTrackConfig={orbitTrackConfig} />
             <div className="map-toolbar">
               <select className="map-preset-select" defaultValue="" onChange={(e) => applyRecommendedMap(e.target.value)}>
@@ -2107,9 +2202,13 @@ function App() {
         horizonHours={effectivePredictionHorizonHours}
         passWindowMode={passWindowMode}
         onPassWindowModeChange={setPassWindowMode}
+        passDate={passDate}
+        onPassDateChange={setPassDate}
         timeZone={opsConfig.timezone || "Asia/Tokyo"}
         selectedPassIndices={pinnedPassIndices}
+        selectedOperationPassIndex={selectedOperationPassIndex}
         onSelectPass={toggleSelectedRadarPass}
+        onSelectOperationPass={toggleOperationPass}
         onCopyPassText={copyPassTableText}
       />
 

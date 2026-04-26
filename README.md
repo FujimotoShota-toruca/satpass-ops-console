@@ -346,3 +346,11 @@ orbit_track:
 - `tle_pass_csv_exporter.py` の `range_rate_mps = 1000 * dot(r_km, v_kmps) / |r_km|` に合わせる方針です。
 - Doppler CSV の方位角・仰角出力を小数6桁へ変更しました。
 - `manifest.txt` に range rate method を記録するようにしました。
+
+
+## v0.16.0 updates
+
+- Map orbit legend is placed outside the map canvas to avoid covering ground tracks.
+- Visible Passes now supports a default `1Day` mode with a date picker.
+- One operation pass can be selected independently from radar plot selection.
+- `PASS TIMER` uses the selected operation pass when one is selected; otherwise it falls back to the next/active pass.

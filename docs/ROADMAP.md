@@ -112,3 +112,9 @@
 - Doppler算出を速度ベクトルベース化しました。
 - 既存の `tle_pass_csv_exporter.py` と同じく、topocentric position / velocity のLOS方向射影で range rate を算出します。
 - 次の検証課題は、Skyfield版とブラウザ版で `range_rate_mps` / `az_deg` / `el_deg` / `range_km` を同時出力して差分評価することです。
+
+
+## v0.16.0
+
+- Added one-day pass-date mode and independent operation-pass selection for PASS TIMER.
+- Moved the map orbit legend outside of the map drawing area.
