@@ -1830,3 +1830,158 @@ td {
   border-top-style: dashed;
   opacity: 0.72;
 }
+
+/* ---- v21 quick mission setup / YAML-centered UX ------------------------ */
+.mission-setup-panel {
+  margin: 10px 0 12px;
+  padding: 13px;
+}
+
+.mission-title-row {
+  align-items: flex-start;
+  margin-bottom: 11px;
+}
+
+.mission-title-row p {
+  margin: 4px 0 0;
+}
+
+.mission-status-chip {
+  border: 1px solid rgba(56, 189, 248, 0.24);
+  border-radius: 999px;
+  padding: 7px 11px;
+  background: rgba(2, 6, 23, 0.55);
+  color: #cbd5e1;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.mission-setup-grid {
+  display: grid;
+  grid-template-columns: minmax(360px, 1.05fr) minmax(330px, 0.95fr) minmax(270px, 0.65fr);
+  gap: 11px;
+  align-items: stretch;
+}
+
+.quick-tle-card,
+.target-select-card,
+.yaml-tools-card {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 16px;
+  background: rgba(2, 6, 23, 0.36);
+  padding: 11px;
+  min-width: 0;
+}
+
+.step-label {
+  color: #67e8f9;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.quick-tle-label {
+  min-width: 0;
+}
+
+.quick-tle-textarea {
+  min-height: 86px;
+  max-height: 150px;
+  resize: vertical;
+  line-height: 1.35;
+  font-size: 11px;
+}
+
+.quick-action-row,
+.quick-action-grid {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.quick-action-row .button {
+  flex: 1 1 auto;
+  min-height: 36px;
+}
+
+.quick-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.quick-action-grid .button {
+  min-height: 36px;
+  width: 100%;
+  text-align: center;
+}
+
+.target-select-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.mission-setup-panel .sat-display-panel {
+  position: static;
+  box-shadow: none;
+  background: rgba(15, 23, 42, 0.44);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  max-height: 140px;
+  overflow: auto;
+}
+
+.mission-setup-panel .sat-check-list {
+  max-height: 88px;
+  overflow: auto;
+}
+
+.config-message-box {
+  margin-top: 9px;
+  min-height: 52px;
+  max-height: 86px;
+  overflow: auto;
+  border: 1px solid rgba(148, 163, 184, 0.13);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.55);
+  color: #cbd5e1;
+  padding: 8px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.control-panel > .muted.small {
+  margin: -3px 0 4px;
+}
+
+@media (max-width: 1240px) {
+  .mission-setup-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .yaml-tools-card {
+    grid-column: 1 / -1;
+  }
+
+  .quick-action-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .mission-setup-grid,
+  .target-select-grid,
+  .quick-action-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mission-title-row {
+    display: grid;
+  }
+
+  .mission-status-chip {
+    width: fit-content;
+  }
+}

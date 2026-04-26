@@ -1818,6 +1818,103 @@ function ViewModeSelector({ viewMode, onChange }) {
   );
 }
 
+
+function MissionSetupPanel({
+  quickTleText,
+  onQuickTleTextChange,
+  onAddQuickTle,
+  onAddAndFetchQuickTle,
+  onLoadDefaultTleSources,
+  onFetchTleSources,
+  tleSourceCount,
+  exporting,
+  selectedSat,
+  satellites,
+  onSelectedSatChange,
+  selectedStation,
+  stations,
+  onSelectedStationChange,
+  visibleSatIds,
+  onToggleVisibleSatellite,
+  onSetAllVisible,
+  onImportConfigFile,
+  onDownloadTemplate,
+  onDownloadTleSourceTemplate,
+  onExportYaml,
+  onClearLocalConfig,
+  onOpenGitHubRepository,
+  configMessage,
+}) {
+  return (
+    <section className="panel mission-setup-panel">
+      <div className="panel-title-row mission-title-row">
+        <div>
+          <h2>Mission Setup</h2>
+          <p className="muted small">TLE追加・対象選択・YAML入出力をここに集約します。設定の正本はYAMLです。</p>
+        </div>
+        <div className="mission-status-chip">TLE sources: <strong>{tleSourceCount}</strong></div>
+      </div>
+
+      <div className="mission-setup-grid">
+        <div className="quick-tle-card">
+          <div className="step-label">1 / Add TLE</div>
+          <label className="quick-tle-label">
+            TLE URL list or 3-line TLE
+            <textarea
+              className="quick-tle-textarea mono"
+              spellCheck="false"
+              value={quickTleText}
+              onChange={(event) => onQuickTleTextChange(event.target.value)}
+              placeholder={'OBJECT A@https://celestrak.org/NORAD/elements/gp.php?CATNR=68792&FORMAT=TLE\n\nまたは\nSAT NAME\n1 .....\n2 .....'}
+            />
+          </label>
+          <div className="quick-action-row">
+            <button className="button primary" onClick={onAddAndFetchQuickTle} disabled={exporting}>Add & Fetch</button>
+            <button className="button" onClick={onAddQuickTle}>Add to YAML</button>
+            <button className="button" onClick={onLoadDefaultTleSources}>KAKUSHIN URLs</button>
+            <button className="button" onClick={onFetchTleSources} disabled={exporting || !tleSourceCount}>Fetch all</button>
+          </div>
+        </div>
+
+        <div className="target-select-card">
+          <div className="step-label">2 / Select Target</div>
+          <div className="target-select-grid">
+            <label>
+              Satellite
+              <select value={selectedSat?.id ?? ""} onChange={(event) => onSelectedSatChange(event.target.value)}>
+                {satellites.map((sat) => <option key={sat.id} value={sat.id}>{sat.name}</option>)}
+              </select>
+            </label>
+            <label>
+              Ground Station
+              <select value={selectedStation?.id ?? ""} onChange={(event) => onSelectedStationChange(event.target.value)}>
+                {stations.map((station) => <option key={station.id} value={station.id}>{station.name}</option>)}
+              </select>
+            </label>
+          </div>
+          <SatelliteDisplayPanel satellites={satellites} visibleSatIds={visibleSatIds} onToggle={onToggleVisibleSatellite} onSetAllVisible={onSetAllVisible} />
+        </div>
+
+        <div className="yaml-tools-card">
+          <div className="step-label">3 / YAML & Tools</div>
+          <div className="quick-action-grid">
+            <label className="button file-button primary">
+              Import YAML
+              <input type="file" multiple accept=".yaml,.yml,.json,application/x-yaml,application/json" onChange={onImportConfigFile} />
+            </label>
+            <button className="button" onClick={onExportYaml}>Export YAML</button>
+            <button className="button" onClick={onDownloadTemplate}>Template</button>
+            <button className="button" onClick={onDownloadTleSourceTemplate}>TLE URL YAML</button>
+            <button className="button github-button" onClick={onOpenGitHubRepository}>GitHub</button>
+            <button className="button danger" onClick={onClearLocalConfig}>Clear Local</button>
+          </div>
+          <div className="config-message-box">{configMessage}</div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function App() {
   const [initialConfig] = useState(() => {
     try {
@@ -1845,6 +1942,7 @@ function App() {
   const now = useMemo(() => new Date(clockNow.getTime() + safeNumber(timeOffsetMinutes, 0) * 60000), [clockNow, timeOffsetMinutes]);
   const [configText, setConfigText] = useState(() => buildTemplateYaml());
   const [configMessage, setConfigMessage] = useState("YAMLでTLE・地上局・周波数・地図設定を一括管理します。");
+  const [quickTleText, setQuickTleText] = useState("");
   const [exporting, setExporting] = useState(false);
   const [viewMode, setViewMode] = useState("split");
   const [pinnedPassIndices, setPinnedPassIndices] = useState([]);
@@ -2100,28 +2198,119 @@ function App() {
     setConfigMessage(`推奨地図を設定しました: ${preset.label}`);
   }
 
-  async function fetchTleSources() {
-    if (!tleSources.length) {
+  function buildQuickTleConfigPatch(text) {
+    const trimmed = safeString(text).trim();
+    if (!trimmed) throw new Error("TLE URL または TLE ブロックを入力してください。");
+
+    const sources = normalizeTleSources(trimmed);
+    if (sources.length) return { sources, satellites: [], kind: "source" };
+
+    try {
+      const parsed = parseTleBlock(trimmed);
+      return {
+        sources: [],
+        satellites: [{
+          id: sanitizeId(parsed.name, `sat-${satellites.length + 1}`),
+          name: parsed.name,
+          line1: parsed.line1,
+          line2: parsed.line2,
+          color: SAT_COLORS[satellites.length % SAT_COLORS.length],
+        }],
+        kind: "tle",
+      };
+    } catch {
+      const parsedConfig = parseConfigText(trimmed);
+      const normalized = normalizeConfig(parsedConfig);
+      const userDefinedTle = hasUserDefinedTle(parsedConfig);
+      return {
+        sources: normalized.tleSources || [],
+        satellites: userDefinedTle ? normalized.satellites : [],
+        kind: "yaml",
+      };
+    }
+  }
+
+  function mergeTleSources(prevSources, addedSources) {
+    const next = [...prevSources];
+    addedSources.forEach((source) => {
+      if (!source?.url) return;
+      const idx = next.findIndex((item) => item.id === source.id || item.url.toLowerCase() === source.url.toLowerCase());
+      if (idx >= 0) next[idx] = { ...next[idx], ...source };
+      else next.push(source);
+    });
+    return next;
+  }
+
+  function mergeSatellites(prevSats, addedSats) {
+    const next = [...prevSats];
+    addedSats.forEach((sat) => {
+      if (!sat?.line1 || !sat?.line2) return;
+      const idx = next.findIndex((item) => item.id === sat.id || item.name === sat.name || item.sourceUrl === sat.sourceUrl);
+      if (idx >= 0) next[idx] = { ...next[idx], ...sat, color: next[idx].color || sat.color };
+      else next.push({ ...sat, color: sat.color || SAT_COLORS[next.length % SAT_COLORS.length] });
+    });
+    return next;
+  }
+
+  function syncYamlAfterQuickTle(nextSources, nextSatellites) {
+    const updated = exportableConfig(
+      appConfig,
+      opsConfig,
+      mapConfig,
+      radarConfig,
+      orbitTrackConfig,
+      nextSources,
+      nextSatellites.find((sat) => sat.id === selectedSatId) || nextSatellites[0],
+      selectedStation,
+      nextSatellites,
+      stations
+    );
+    setConfigText(dumpYaml(updated));
+  }
+
+  async function applyQuickTleInput({ fetchAfter = false } = {}) {
+    try {
+      const patch = buildQuickTleConfigPatch(quickTleText);
+      const nextSources = mergeTleSources(tleSources, patch.sources);
+      const nextSats = mergeSatellites(satellites, patch.satellites);
+
+      setTleSources(nextSources);
+      setSatellites(nextSats);
+      if (patch.satellites[0]) setSelectedSatId(patch.satellites[0].id);
+      setVisibleSatIds((prev) => Array.from(new Set([...prev, ...patch.satellites.map((sat) => sat.id)])));
+      syncYamlAfterQuickTle(nextSources, nextSats);
+
+      const sourceMessage = patch.sources.length ? `TLE source=${patch.sources.length}` : "";
+      const satMessage = patch.satellites.length ? `TLE sat=${patch.satellites.length}` : "";
+      setConfigMessage(`Quick TLE をYAMLへ反映しました。${[sourceMessage, satMessage].filter(Boolean).join(", ") || "no item"}`);
+
+      if (fetchAfter) {
+        if (!patch.sources.length) {
+          setConfigMessage("TLE本体は追加済みです。URL取得対象はありません。");
+          return;
+        }
+        await fetchTleSourceList(patch.sources, "Quick TLE");
+      }
+    } catch (error) {
+      setConfigMessage(`Quick TLE の取り込みに失敗しました: ${error.message}`);
+    }
+  }
+
+  async function fetchTleSourceList(sources, label = "TLE URL") {
+    const targetSources = Array.isArray(sources) ? sources : [];
+    if (!targetSources.length) {
       setConfigMessage("TLE取得元が未設定です。tle_sources または satellites[].tle_url をYAMLに追加してください。");
       return;
     }
     setExporting(true);
-    setConfigMessage(`TLE URL から取得中です。source_count=${tleSources.length}`);
+    setConfigMessage(`${label} から取得中です。source_count=${targetSources.length}`);
     try {
-      const results = await Promise.allSettled(tleSources.map((source, index) => fetchSatelliteFromTleSource(source, index)));
+      const results = await Promise.allSettled(targetSources.map((source, index) => fetchSatelliteFromTleSource(source, index)));
       const fetched = results.filter((result) => result.status === "fulfilled").map((result) => result.value);
       const failed = results.filter((result) => result.status === "rejected").map((result) => result.reason?.message || String(result.reason));
       if (!fetched.length) throw new Error(failed.join(" / ") || "全TLE取得に失敗しました。");
 
-      setSatellites((prev) => {
-        const next = [...prev];
-        fetched.forEach((sat) => {
-          const idx = next.findIndex((item) => item.id === sat.id || item.name === sat.name || item.sourceUrl === sat.sourceUrl);
-          if (idx >= 0) next[idx] = { ...next[idx], ...sat, color: next[idx].color || sat.color };
-          else next.push({ ...sat, color: SAT_COLORS[next.length % SAT_COLORS.length] });
-        });
-        return next;
-      });
+      setSatellites((prev) => mergeSatellites(prev, fetched));
       setVisibleSatIds((prevIds) => Array.from(new Set([...prevIds, ...fetched.map((item) => item.id)])));
       setSelectedSatId(fetched[0]?.id ?? selectedSatId);
       setConfigMessage(`TLE取得完了: success=${fetched.length}, failed=${failed.length}${failed.length ? ` / ${failed.join(" / ")}` : ""}`);
@@ -2130,6 +2319,10 @@ function App() {
     } finally {
       setExporting(false);
     }
+  }
+
+  async function fetchTleSources() {
+    await fetchTleSourceList(tleSources, "TLE URL");
   }
 
   function toggleVisibleSatellite(id) {
@@ -2211,6 +2404,33 @@ function App() {
         exporting={exporting}
         selectedSat={selectedSat}
         selectedStation={selectedStation}
+      />
+
+      <MissionSetupPanel
+        quickTleText={quickTleText}
+        onQuickTleTextChange={setQuickTleText}
+        onAddQuickTle={() => applyQuickTleInput({ fetchAfter: false })}
+        onAddAndFetchQuickTle={() => applyQuickTleInput({ fetchAfter: true })}
+        onLoadDefaultTleSources={loadDefaultTleSources}
+        onFetchTleSources={fetchTleSources}
+        tleSourceCount={tleSources.length}
+        exporting={exporting}
+        selectedSat={selectedSat}
+        satellites={satellites}
+        onSelectedSatChange={setSelectedSatId}
+        selectedStation={selectedStation}
+        stations={stations}
+        onSelectedStationChange={setSelectedStationId}
+        visibleSatIds={visibleSatIds}
+        onToggleVisibleSatellite={toggleVisibleSatellite}
+        onSetAllVisible={setAllSatellitesVisible}
+        onImportConfigFile={importConfigFile}
+        onDownloadTemplate={downloadTemplate}
+        onDownloadTleSourceTemplate={downloadTleSourceTemplate}
+        onExportYaml={exportYaml}
+        onClearLocalConfig={clearLocalConfig}
+        onOpenGitHubRepository={openGitHubRepository}
+        configMessage={configMessage}
       />
 
       <section className="panel ops-dashboard">
@@ -2320,26 +2540,8 @@ function App() {
 
       <section className="config-grid">
         <section className="panel control-panel">
-          <h2>Tracking Target</h2>
-          <div className="selected-control-target">Selected: <strong>{selectedSat?.name ?? "--"}</strong></div>
-          <SatelliteDisplayPanel satellites={satellites} visibleSatIds={visibleSatIds} onToggle={toggleVisibleSatellite} onSetAllVisible={setAllSatellitesVisible} />
-          <div className="tle-source-box">
-            <div className="muted tiny">TLE URL sources: {tleSources.length}</div>
-            <button className="button compact" onClick={loadDefaultTleSources}>Load KAKUSHIN URLs</button>
-            <button className="button compact primary" onClick={fetchTleSources} disabled={exporting || !tleSources.length}>Fetch / Update TLE</button>
-          </div>
-          <label>
-            Satellite
-            <select value={selectedSat?.id ?? ""} onChange={(e) => setSelectedSatId(e.target.value)}>
-              {satellites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-          </label>
-          <label>
-            Ground Station
-            <select value={selectedStation?.id ?? ""} onChange={(e) => setSelectedStationId(e.target.value)}>
-              {stations.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-            </select>
-          </label>
+          <h2>Advanced Display Settings</h2>
+          <p className="muted small">地図・レーダー背景・軌道色分けなど、表示系だけを調整します。TLE追加と対象選択は上の Mission Setup に集約しています。</p>
           <label>
             Map Preset
             <select defaultValue="" onChange={(e) => applyRecommendedMap(e.target.value)}>
@@ -2366,18 +2568,7 @@ function App() {
             </select>
           </label>
           <div className="app-tools-box">
-            <div className="muted tiny">Application / configuration tools</div>
-            <div className="button-row compact-tool-row">
-              <button className="button compact" onClick={downloadTemplate}>Template YAML</button>
-              <button className="button compact" onClick={downloadTleSourceTemplate}>TLE URL YAML</button>
-              <button className="button compact" onClick={exportYaml}>Export YAML</button>
-              <button className="button compact danger" onClick={clearLocalConfig}>Clear Local Config</button>
-              <button className="button compact github-button" onClick={openGitHubRepository}>GitHub</button>
-              <label className="button compact file-button">
-                Import YAML(s)/JSON
-                <input type="file" multiple accept=".yaml,.yml,.json,application/x-yaml,application/json" onChange={importConfigFile} />
-              </label>
-            </div>
+            <div className="muted tiny">Privacy / data flow</div>
             <p className="privacy-note">YAML/ローカル画像はブラウザ内で処理されます。外部通信はTLE取得URL・外部地図/背景画像URLへのGETリクエストが中心です。</p>
           </div>
         </section>

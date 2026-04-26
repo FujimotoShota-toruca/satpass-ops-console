@@ -144,3 +144,10 @@
 - URL取得型YAMLを読み込んだ直後に衛星表示が空になる問題を回避しました。
 - TLE URLのみの設定では、Fetch / Update TLE 実行前にデフォルトTLEを暫定表示します。
 - 設定適用メッセージに、TLE URL取得が必要な場合の案内を追加しました。
+
+## v0.21.0
+
+- Reworked the UI around a YAML-centered Mission Setup panel.
+- Added quick TLE paste workflow: URL list / 3-line TLE -> YAML -> optional fetch.
+- Moved target selection and YAML tool buttons into a single, more discoverable area.
+- Added `OperationalPreparationProcedures.md` to the project root.

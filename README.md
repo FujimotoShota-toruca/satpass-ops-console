@@ -1,4 +1,4 @@
-# [SatPass Ops Console](https://fujimotoshota-toruca.github.io/satpass-ops-console/)
+# SatPass Ops Console
 
 SatPass Ops Console は、TLE と地上局情報を YAML で登録し、ブラウザ上で衛星の地上軌跡、可視範囲、地上局から見た方位角・仰角、直近可視パス、日照/蝕、ドップラーシフト計画値を表示/出力するフロントエンド完結型の実験アプリです。
 
@@ -379,3 +379,12 @@ orbit_track:
 - URL取得型YAMLを読み込んだ直後に衛星表示が空になる問題を回避しました。
 - TLE URLのみの設定では、Fetch / Update TLE 実行前にデフォルトTLEを暫定表示します。
 - 設定適用メッセージに、TLE URL取得が必要な場合の案内を追加しました。
+
+## v0.21.0 UI update
+
+- Added a top-level **Mission Setup** panel for quick TLE registration.
+- TLE URL lists such as `OBJECT A@https://...` and direct 3-line TLE blocks can be pasted into the app.
+- `Add & Fetch` imports the pasted TLE source into the YAML-backed configuration and immediately retrieves the latest TLE.
+- Satellite/ground-station target selection and display-satellite checkboxes were moved into the same setup panel.
+- YAML import/export/template/GitHub/local-config controls were grouped in the setup panel to reduce button scattering.
+- Added root-level `OperationalPreparationProcedures.md` for deployment/operation preparation procedures.
