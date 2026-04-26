@@ -9,6 +9,7 @@ const AU_KM = 149597870.7;
 const DEG2RAD = Math.PI / 180;
 const RAD2DEG = 180 / Math.PI;
 const C_MPS = 299_792_458;
+const EARTH_OMEGA_RAD_S = 7.2921150e-5;
 
 const DEFAULT_MAP_URL = "https://commons.wikimedia.org/wiki/Special:Redirect/file/Equirectangular-projection.jpg?width=2048";
 const DEFAULT_MAP_ATTRIBUTION = "Wikimedia Commons: Equirectangular-projection.jpg / NASA imagery derivative";
@@ -825,17 +826,63 @@ function computeLookAngles(satState, station) {
   return { azDeg, elDeg, rangeKm, visible: elDeg >= station.minElevationDeg };
 }
 
-function computeObservation(tle, station, date, rangeRateDtSec = 1) {
+function dot3(a, b) {
+  return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+function sub3(a, b) {
+  return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
+}
+
+function norm3(a) {
+  return Math.sqrt(dot3(a, a));
+}
+
+function observerEciStateKm(station, gmst) {
+  // tle_pass_csv_exporter.py の Skyfield 実装に寄せるため、
+  // レンジレートは「レンジの時間差分」ではなく、
+  // topocentric position / velocity のLOS方向射影で計算する。
+  // satellite.js のSGP4出力はTEME系相当だが、同じGMST近似で観測局をECI側へ戻すことで、
+  // look angle 計算と整合した近似系で相対速度を扱う。
+  const observerGd = {
+    latitude: station.latDeg * DEG2RAD,
+    longitude: station.lonDeg * DEG2RAD,
+    height: station.heightM / 1000,
+  };
+  const observerEcf = satellite.geodeticToEcf(observerGd);
+  const observerEci = satellite.ecfToEci(observerEcf, gmst);
+
+  // ECEF固定の地上局を慣性系で見た速度。
+  // v = omega_E x r。単位は km/s。
+  const observerVelEci = {
+    x: -EARTH_OMEGA_RAD_S * observerEci.y,
+    y: EARTH_OMEGA_RAD_S * observerEci.x,
+    z: 0,
+  };
+
+  return { positionEciKm: observerEci, velocityEciKmS: observerVelEci };
+}
+
+function computeTopocentricRangeRateMps(state, station) {
+  if (!state || !station) return 0;
+  try {
+    const observer = observerEciStateKm(station, state.gmst);
+    const rhoKm = sub3(state.positionEciKm, observer.positionEciKm);
+    const rhoDotKmS = sub3(state.velocityEciKmS, observer.velocityEciKmS);
+    const rhoNormKm = norm3(rhoKm);
+    if (!Number.isFinite(rhoNormKm) || rhoNormKm <= 0) return 0;
+    return 1000.0 * dot3(rhoKm, rhoDotKmS) / rhoNormKm;
+  } catch {
+    return 0;
+  }
+}
+
+function computeObservation(tle, station, date) {
   const state = computeSatState(tle, date);
   const look = state ? computeLookAngles(state, station) : null;
   if (!look) return null;
 
-  const beforeState = computeSatState(tle, new Date(date.getTime() - rangeRateDtSec * 1000));
-  const afterState = computeSatState(tle, new Date(date.getTime() + rangeRateDtSec * 1000));
-  const beforeLook = beforeState ? computeLookAngles(beforeState, station) : null;
-  const afterLook = afterState ? computeLookAngles(afterState, station) : null;
-  const rangeRateMps = beforeLook && afterLook ? ((afterLook.rangeKm - beforeLook.rangeKm) * 1000) / (2 * rangeRateDtSec) : 0;
-
+  const rangeRateMps = computeTopocentricRangeRateMps(state, station);
   return { ...look, rangeRateMps, state };
 }
 
@@ -1149,7 +1196,7 @@ function frequencyRowsForPass(pass, ops) {
     const fDown = ops.downlinkBaseFrequencyHz * ratio;
     const fUp = ops.uplinkBaseFrequencyHz / ratio;
     const t = formatHmsInZone(row.date, tz);
-    const common = `${row.obs.azDeg.toFixed(3)},${row.obs.elDeg.toFixed(3)}`;
+    const common = `${row.obs.azDeg.toFixed(6)},${row.obs.elDeg.toFixed(6)}`;
     uplink.push(`${t},${fUp.toFixed(3)},${common}`);
     downlink.push(`${t},${fDown.toFixed(3)},${common}`);
   }
@@ -1184,6 +1231,7 @@ async function buildDopplerZip({ appConfig, opsConfig, mapConfig, radarConfig, o
     `pass_count: ${passes.length}`,
     "csv_format: [時刻],[周波数(ドップラー補正済みHz)],[方位角deg],[仰角deg]",
     "doppler_sign: range_rate > 0 means receding; downlink=f0*(1-vr/c), uplink=f0/(1-vr/c)",
+    "range_rate_method: topocentric_position_velocity_projection; aligned with tle_pass_csv_exporter.py",
     "",
   ];
 

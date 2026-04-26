@@ -60,11 +60,15 @@ Doppler CSV ZIP Export
 
 ## ドップラー計算
 
-Range rate はレンジ時系列の中心差分で近似します。
+Range rate は、既存の `tle_pass_csv_exporter.py` に合わせ、topocentric position / velocity のLOS方向射影で計算します。
 
 ```text
-v_r ≈ (range(t+dt) - range(t-dt)) / (2dt)
+rho_vec  = r_sat - r_gs
+rho_dot  = v_sat - v_gs
+v_r      = dot(rho_vec, rho_dot) / |rho_vec|
 ```
+
+ブラウザ版では、衛星状態は `satellite.js` のSGP4出力、地上局位置は `geodeticToEcf()` → `ecfToEci()`、地上局速度は `omega_E × r_gs` で近似します。
 
 符号規約:
 
@@ -91,7 +95,7 @@ MVPではSVGベースの簡易地図です。`map.projection` により以下を
 ## 既知の限界
 
 - 地図タイルではなく単一SVG背景
-- Range rate は簡易中心差分
+- Range rate は速度ベクトル射影に変更済み。ただし、Skyfield版と完全一致させるには時系・座標変換差の検証が必要
 - AOS/LOS 探索は高精度な二分探索ではない
 - Web Worker 化していないため、多数衛星ではUIが重くなる可能性あり
 - 実運用向けの時系/IERS/EOP/局制約/機器制約は未導入
@@ -125,3 +129,11 @@ MVPではSVGベースの簡易地図です。`map.projection` により以下を
 - `visibleSatIds` は地図上に描画する衛星IDの集合です。
 - `selectedSatId` はレーダーチャート、Pass table、Doppler CSV ZIP の対象です。
 - Pass timer は `predictPasses()` の結果から、現在パス中なら LOS まで、非パス中なら次回 AOS までを表示します。
+
+
+## v0.15.0 notes
+
+- Doppler CSV の range rate 算出を `tle_pass_csv_exporter.py` と同じ考え方に寄せました。
+- 旧実装: range(t+dt) と range(t-dt) の中心差分。
+- 新実装: topocentric position / velocity のLOS方向射影。
+- Doppler CSV の Az/El は小数6桁出力です。

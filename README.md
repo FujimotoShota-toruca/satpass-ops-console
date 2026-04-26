@@ -195,7 +195,7 @@ CSV はヘッダなしで、各行は以下です。
 - Downlink: `f_down = f0 * (1 - v_r / c)`
 - Uplink: `f_up = f0 / (1 - v_r / c)`
 
-現時点の range rate は、レンジの中心差分から求める簡易計算です。高精度運用に使う場合は、局座標の速度、時系、地球回転、IERS/EOP、対流圏/電離圏、実アンテナ制約などを含む検証が必要です。
+v0.15.0 以降の range rate は、既存の `tle_pass_csv_exporter.py` に合わせて、topocentric position / velocity のLOS方向射影で計算します。すなわち、レンジの中心差分ではなく、`range_rate = dot(r, v) / |r|` を用います。ブラウザ版では satellite.js のSGP4/TEME近似とGMST変換を使うため、Skyfield版と完全一致するとは限りませんが、ドップラー計算ロジックとCSV桁数は既存ツールへ寄せています。
 
 ## 地図画像
 
@@ -338,3 +338,11 @@ orbit_track:
 - ブラウザ内に保存された設定を削除する `Clear Local Config` ボタンを追加
 - README と `docs/PRIVACY_DATA_FLOW.md` にデータフローと外部通信範囲を明記
 - localStorage 保存キーを `web-orbitron:config-yaml-v14` に更新し、旧キーも読み込み対象に維持
+
+
+## v0.15.0
+
+- Doppler CSV の range rate 計算を、レンジ中心差分から topocentric position / velocity のLOS方向射影へ変更しました。
+- `tle_pass_csv_exporter.py` の `range_rate_mps = 1000 * dot(r_km, v_kmps) / |r_km|` に合わせる方針です。
+- Doppler CSV の方位角・仰角出力を小数6桁へ変更しました。
+- `manifest.txt` に range rate method を記録するようにしました。

@@ -21,7 +21,7 @@
 1. 複数衛星 × 複数地上局の可視マトリクス表示
 2. 全衛星×全地上局の Doppler CSV 一括出力
 3. AOS/LOS 境界の二分探索精密化
-4. Doppler算出の速度ベクトルベース化
+4. Skyfield版との比較検証用 debug CSV 出力
 5. 衛星別 uplink/downlink 周波数設定
 6. CSV出力の列カスタマイズ
 7. 地上局アンテナ制約、方位角禁止域、最大追尾角速度の導入
@@ -105,3 +105,10 @@
 - Added in-app GitHub repository link.
 - Added `Clear Local Config` to remove saved localStorage configuration.
 - Added privacy/data-flow documentation for YAML import, local images, TLE URL fetches, external background images, and generated CSV ZIP files.
+
+
+## v0.15.0
+
+- Doppler算出を速度ベクトルベース化しました。
+- 既存の `tle_pass_csv_exporter.py` と同じく、topocentric position / velocity のLOS方向射影で range rate を算出します。
+- 次の検証課題は、Skyfield版とブラウザ版で `range_rate_mps` / `az_deg` / `el_deg` / `range_km` を同時出力して差分評価することです。
