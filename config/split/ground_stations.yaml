@@ -1,0 +1,7 @@
+ground_stations:
+  - id: utsunomiya
+    name: Utsunomiya GS
+    latitude_deg: 36.5551
+    longitude_deg: 139.8828
+    altitude_m: 120.0
+    min_elevation_deg: 0.0

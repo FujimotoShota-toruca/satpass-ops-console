@@ -1,0 +1,7 @@
+map:
+  projection: equirectangular
+  background_image_url: "https://commons.wikimedia.org/wiki/Special:Redirect/file/Equirectangular-projection.jpg?width=2048"
+  background_opacity: 0.78
+  attribution: Wikimedia Commons Equirectangular projection / NASA imagery derivative
+  show_synthetic_land: false
+  show_grid: true

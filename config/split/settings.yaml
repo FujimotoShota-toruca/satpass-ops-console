@@ -1,0 +1,16 @@
+settings:
+  input_root: ./
+  output_root: ../output
+  observation_date: 2026-04-25
+  folder_name: test_ops
+  timezone: Asia/Tokyo
+  min_elevation_deg: 0.0
+
+app:
+  title: SatPass Ops Console
+  refresh_sec: 1
+  prediction_horizon_hours: 12
+  prediction_step_sec: 30
+  track_minutes_before: 45
+  track_minutes_after: 90
+  track_step_sec: 60

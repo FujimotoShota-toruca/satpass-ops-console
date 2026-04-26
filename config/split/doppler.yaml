@@ -1,0 +1,3 @@
+doppler:
+  uplink_base_frequency_hz: 2036250000
+  downlink_base_frequency_hz: 2201000000

@@ -1,0 +1,7 @@
+orbit_track:
+  color_mode: sunlight
+  sunlit_color: "#22c55e"
+  penumbra_color: "#f59e0b"
+  umbra_color: "#7c3aed"
+  default_color: satellite
+  show_eclipse_label: true
