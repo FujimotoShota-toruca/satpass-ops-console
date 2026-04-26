@@ -1570,21 +1570,26 @@ function DataCard({ label, value, accent }) {
 function DopplerOutputPanel({ csvDate, onCsvDateChange, onExportZip, exporting, selectedSat, selectedStation }) {
   return (
     <section className="doppler-output-strip" aria-label="Doppler CSV output controls">
-      <div className="doppler-output-title">
-        <span className="seven-label">DOPPLER CSV OUTPUT</span>
-        <strong>{selectedSat?.name ?? "--"}</strong>
-        <span className="muted tiny">{selectedStation?.name ?? "--"}</span>
+      <div className="doppler-output-heading">
+        <span className="seven-label doppler-output-kicker">DOPPLER CSV OUTPUT</span>
+        <div className="doppler-target-chips" aria-label="Doppler output target">
+          <span className="doppler-chip"><span>Satellite</span><strong>{selectedSat?.name ?? "--"}</strong></span>
+          <span className="doppler-chip"><span>Ground Station</span><strong>{selectedStation?.name ?? "--"}</strong></span>
+        </div>
       </div>
-      <label className="inline-control doppler-date-control">
-        CSV date
-        <input type="date" value={csvDate} onChange={(e) => onCsvDateChange?.(e.target.value)} />
-      </label>
-      <button className="button compact primary export-main-button doppler-export-button" onClick={onExportZip} disabled={exporting}>
-        {exporting ? "Exporting..." : "Export Doppler CSV ZIP"}
-      </button>
+      <div className="doppler-output-controls">
+        <label className="inline-control doppler-date-control">
+          CSV date
+          <input type="date" value={csvDate} onChange={(e) => onCsvDateChange?.(e.target.value)} />
+        </label>
+        <button className="button compact primary export-main-button doppler-export-button" onClick={onExportZip} disabled={exporting}>
+          {exporting ? "Exporting..." : "Export Doppler CSV ZIP"}
+        </button>
+      </div>
     </section>
   );
 }
+
 
 function MapOrbitLegend({ orbitTrackConfig }) {
   return (

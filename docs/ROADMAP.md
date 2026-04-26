@@ -118,3 +118,9 @@
 
 - Added one-day pass-date mode and independent operation-pass selection for PASS TIMER.
 - Moved the map orbit legend outside of the map drawing area.
+
+
+## v0.17.0 UI update
+
+- Doppler CSV Output を全幅の操作ストリップとして再配置しました。
+- 衛星名・地上局名・日付選択・ZIP出力ボタンが100%表示時にも潰れにくいよう、チップ表示と折り返しレイアウトに変更しました。

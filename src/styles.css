@@ -1662,3 +1662,117 @@ td {
     white-space: normal;
   }
 }
+
+/* ---- v17 clearer Doppler output strip ---------------------------------- */
+/* Doppler CSV output is a high-level operation control, not a small telemetry
+   card.  Keep it full-width and allow wrapping so the target labels, date
+   picker, and export button do not collide on 100% browser zoom. */
+.doppler-output-strip {
+  width: 100%;
+  max-width: none;
+  min-height: 58px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  border-radius: 18px;
+}
+
+.doppler-output-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  min-width: min(100%, 420px);
+}
+
+.doppler-output-kicker {
+  flex: 0 0 auto;
+  color: #bae6fd;
+}
+
+.doppler-target-chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-width: 0;
+}
+
+.doppler-chip {
+  display: inline-grid;
+  grid-template-columns: auto minmax(0, max-content);
+  align-items: baseline;
+  gap: 7px;
+  max-width: min(380px, 100%);
+  padding: 6px 9px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 999px;
+  background: rgba(2, 6, 23, 0.42);
+  color: #94a3b8;
+  font-size: 11px;
+  line-height: 1.1;
+}
+
+.doppler-chip strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #f8fafc;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+}
+
+.doppler-output-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-left: auto;
+}
+
+.doppler-output-strip .doppler-date-control {
+  min-width: 220px;
+  grid-template-columns: auto minmax(140px, 170px);
+  align-items: center;
+  margin: 0;
+}
+
+.doppler-output-strip .doppler-export-button {
+  min-height: 42px;
+  padding-inline: 20px !important;
+  font-size: 13px;
+}
+
+@media (max-width: 900px) {
+  .doppler-output-heading,
+  .doppler-output-controls {
+    width: 100%;
+  }
+
+  .doppler-output-controls {
+    justify-content: stretch;
+  }
+
+  .doppler-output-strip .doppler-date-control,
+  .doppler-output-strip .doppler-export-button {
+    flex: 1 1 220px;
+  }
+}
+
+@media (max-width: 620px) {
+  .doppler-chip {
+    width: 100%;
+    grid-template-columns: 96px minmax(0, 1fr);
+    border-radius: 13px;
+  }
+
+  .doppler-output-strip .doppler-date-control {
+    grid-template-columns: 1fr;
+  }
+}

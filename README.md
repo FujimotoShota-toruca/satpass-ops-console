@@ -354,3 +354,9 @@ orbit_track:
 - Visible Passes now supports a default `1Day` mode with a date picker.
 - One operation pass can be selected independently from radar plot selection.
 - `PASS TIMER` uses the selected operation pass when one is selected; otherwise it falls back to the next/active pass.
+
+
+## v0.17.0 UI update
+
+- Doppler CSV Output を全幅の操作ストリップとして再配置しました。
+- 衛星名・地上局名・日付選択・ZIP出力ボタンが100%表示時にも潰れにくいよう、チップ表示と折り返しレイアウトに変更しました。
