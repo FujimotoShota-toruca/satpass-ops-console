@@ -722,8 +722,9 @@ function formatHmInZone(date, timeZone) {
   return `${pad2(p.hour)}:${pad2(p.minute)}`;
 }
 
-function buildPassCopyText(passes, timeZone) {
+function buildPassCopyText(passes, timeZone, operationPassKeys = []) {
   if (!passes.length) return "No visible pass in the selected prediction window.";
+  const operationSet = new Set(operationPassKeys);
   const byDate = new Map();
   for (const pass of passes) {
     const key = formatMonthDayInZone(pass.aos, timeZone);
@@ -732,13 +733,14 @@ function buildPassCopyText(passes, timeZone) {
   }
 
   const lines = [
-    "Pass[日付No] [AOS時刻]to[LOS時刻]@MEL=[MEL][deg.] の形式で書いております",
+    "Pass[日付No] [AOS時刻]to[LOS時刻]@MEL=[MEL][deg.] [運用/非運用] の形式で書いております",
     "",
   ];
   for (const [dateLabel, datePasses] of byDate.entries()) {
     lines.push(dateLabel);
     datePasses.forEach((pass, index) => {
-      lines.push(`Pass[${pad2(index + 1)}] ${formatHmInZone(pass.aos, timeZone)} to ${formatHmInZone(pass.los, timeZone)} @ MEL=${pass.maxElDeg.toFixed(1)}[deg.]`);
+      const opsLabel = operationSet.has(passStableKey(pass)) ? "運用" : "非運用";
+      lines.push(`Pass[${pad2(index + 1)}] ${formatHmInZone(pass.aos, timeZone)} to ${formatHmInZone(pass.los, timeZone)} @ MEL=${pass.maxElDeg.toFixed(1)}[deg.] [${opsLabel}]`);
     });
     lines.push("");
   }
@@ -1338,19 +1340,36 @@ function radarPointFromAzEl(azDeg, elDeg, cx, cy, rMax) {
 function sampleRadarPath(tle, station, pass, stepSec = 20) {
   if (!tle || !station || !pass?.aos || !pass?.los) return [];
   const rows = [];
-  const start = pass.aos.getTime();
-  const end = pass.los.getTime();
   const step = Math.max(5, stepSec) * 1000;
+
+  // AOS-LOS の可視区間に加え、前後数分を「非可視側の破線」用に含める。
+  const marginMs = 5 * 60 * 1000;
+  const start = pass.aos.getTime() - marginMs;
+  const end = pass.los.getTime() + marginMs;
+
   for (let ms = start; ms <= end; ms += step) {
     const date = new Date(ms);
     const obs = computeObservation(tle, station, date, 1);
-    if (obs?.visible) rows.push({ date, ...obs, eclipseMode: computeEclipseStatus(obs.state, date).mode });
+    if (!obs) continue;
+
+    // 極端な地平線下まで描くと外周に不要な線が出るため、少し下までに制限する。
+    if (obs.elDeg < -5) continue;
+
+    rows.push({
+      date,
+      ...obs,
+      visibleForRadar: !!obs.visible,
+      eclipseMode: computeEclipseStatus(obs.state, date).mode,
+    });
   }
-  if (!rows.some((row) => Math.abs(row.date.getTime() - end) < 500)) {
-    const obs = computeObservation(tle, station, new Date(end), 1);
-    if (obs?.visible) rows.push({ date: new Date(end), ...obs, eclipseMode: computeEclipseStatus(obs.state, new Date(end)).mode });
-  }
-  return rows;
+
+  [pass.aos, pass.los].forEach((date) => {
+    if (rows.some((row) => Math.abs(row.date.getTime() - date.getTime()) < step / 2)) return;
+    const obs = computeObservation(tle, station, date, 1);
+    if (obs) rows.push({ date, ...obs, visibleForRadar: !!obs.visible, eclipseMode: computeEclipseStatus(obs.state, date).mode });
+  });
+
+  return rows.sort((a, b) => a.date.getTime() - b.date.getTime());
 }
 
 function pathFromRadarRows(rows, cx, cy, rMax) {
@@ -1363,20 +1382,38 @@ function pathFromRadarRows(rows, cx, cy, rMax) {
 }
 
 function radarModeForRow(row) {
-  if (row?.eclipseMode) return row.eclipseMode;
-  if (row?.state) return computeEclipseStatus(row.state, row.date).mode;
-  return "SUNLIT";
+  if (!row?.visibleForRadar) return "NONVISIBLE";
+  const mode = row?.eclipseMode || (row?.state ? computeEclipseStatus(row.state, row.date).mode : "SUNLIT");
+  return mode === "SUNLIT" ? "SUNLIT" : "ECLIPSE";
 }
 
 function buildRadarRenderSegments(rows, cx, cy, rMax) {
   const segments = [];
-  for (let i = 1; i < rows.length; i += 1) {
-    const a = radarPointFromAzEl(rows[i - 1].azDeg, rows[i - 1].elDeg, cx, cy, rMax);
-    const b = radarPointFromAzEl(rows[i].azDeg, rows[i].elDeg, cx, cy, rMax);
-    const mode = radarModeForRow(rows[i]);
-    segments.push({ d: `M${a.x.toFixed(1)},${a.y.toFixed(1)} L${b.x.toFixed(1)},${b.y.toFixed(1)}`, mode });
-  }
-  return segments;
+  let currentMode = null;
+  let currentRows = [];
+
+  rows.forEach((row, index) => {
+    const mode = radarModeForRow(row);
+    if (currentMode === null) {
+      currentMode = mode;
+      currentRows = [row];
+      return;
+    }
+    if (mode !== currentMode) {
+      if (currentRows.length >= 2) segments.push({ mode: currentMode, rows: currentRows });
+      currentMode = mode;
+      currentRows = [rows[index - 1], row];
+    } else {
+      currentRows.push(row);
+    }
+  });
+
+  if (currentRows.length >= 2) segments.push({ mode: currentMode, rows: currentRows });
+
+  return segments.map((segment) => ({
+    mode: segment.mode,
+    d: pathFromRadarRows(segment.rows, cx, cy, rMax),
+  }));
 }
 
 function RadarChart({ look, station, radarConfig, passSeries = [], satMarkers = [], selectedSatName }) {
@@ -1428,9 +1465,19 @@ function RadarChart({ look, station, radarConfig, passSeries = [], satMarkers = 
         const end = rows.length ? radarPointFromAzEl(rows[rows.length - 1].azDeg, rows[rows.length - 1].elDeg, cx, cy, rMax) : null;
         return (
           <g key={series.key || `series-${seriesIndex}`} className={`radar-series radar-series-${seriesIndex % 6}`}>
-            {segments.map((segment, idx) => (
-              <path key={`radar-pass-${seriesIndex}-${idx}`} d={segment.d} className={`radar-pass-segment ${segment.mode.toLowerCase()}`} />
-            ))}
+            {segments.map((segment, idx) => {
+              const segmentStyle = segment.mode === "NONVISIBLE"
+                ? { stroke: "#94a3b8", strokeDasharray: "3 7", strokeOpacity: 0.54, filter: "none" }
+                : (segment.mode === "ECLIPSE" ? { strokeDasharray: "9 6", strokeOpacity: 0.86 } : undefined);
+              return (
+                <path
+                  key={`radar-pass-${seriesIndex}-${idx}`}
+                  d={segment.d}
+                  className={`radar-pass-segment ${segment.mode.toLowerCase()}`}
+                  style={segmentStyle}
+                />
+              );
+            })}
             {start ? <circle cx={start.x} cy={start.y} r="4" className="radar-aos-dot" /> : null}
             {end ? <circle cx={end.x} cy={end.y} r="4" className="radar-los-dot" /> : null}
           </g>
@@ -1612,12 +1659,13 @@ function PassTable({
   onPassDateChange,
   timeZone,
   selectedPassIndices = [],
-  selectedOperationPassIndex = null,
+  selectedOperationPassKeys = [],
   onSelectPass,
   onSelectOperationPass,
   onCopyPassText,
 }) {
   const selectedSet = new Set(selectedPassIndices);
+  const operationSet = new Set(selectedOperationPassKeys);
   const isDay = isOneDayMode(passWindowMode);
   return (
     <section className="panel pass-panel">
@@ -1641,7 +1689,7 @@ function PassTable({
             </label>
           ) : null}
           <button className="button compact" type="button" onClick={onCopyPassText}>Text Copy</button>
-          <span className="muted small">Ops: timer target / Radar: plot select</span>
+          <span className="muted small">Ops: timer schedule / Radar: plot select</span>
           <span className="muted small">{predictionHorizonLabel(passWindowMode, horizonHours, passDate)}</span>
         </div>
       </div>
@@ -1663,7 +1711,8 @@ function PassTable({
           <tbody>
             {passes.map((pass, i) => {
               const radarSelected = selectedSet.has(i);
-              const opsSelected = selectedOperationPassIndex === i;
+              const operationKey = passStableKey(pass);
+              const opsSelected = operationSet.has(operationKey);
               const rowClass = [radarSelected ? "selected-pass-row" : "clickable-pass-row", opsSelected ? "operation-pass-row" : ""].filter(Boolean).join(" ");
               return (
                 <tr key={i} className={rowClass} onClick={() => onSelectPass?.(i)}>
@@ -1673,11 +1722,11 @@ function PassTable({
                       className={opsSelected ? "mini-pill selected" : "mini-pill"}
                       onClick={(event) => {
                         event.stopPropagation();
-                        onSelectOperationPass?.(i);
+                        onSelectOperationPass?.(operationKey);
                       }}
-                      title="Select as next operation pass for PASS TIMER"
+                      title={opsSelected ? "Remove this pass from the operation schedule" : "Add this pass to the operation schedule"}
                     >
-                      {opsSelected ? "OPS" : `#${i + 1}`}
+                      {opsSelected ? "OPS" : "SET"}
                     </button>
                   </td>
                   <td>{radarSelected ? "PLOT" : `#${i + 1}`}</td>
@@ -1706,6 +1755,15 @@ function formatPassBrief(pass, timeZone) {
     maxEl: `${pass.maxElDeg.toFixed(1)}°`,
     range: `${(pass.rangeAtMaxElKm ?? pass.minRangeKm).toFixed(0)} km`,
   };
+}
+
+function passStableKey(pass) {
+  if (!pass?.aos || !pass?.los) return "";
+  return [
+    pass.aos.getTime(),
+    pass.los.getTime(),
+    Math.round((pass.maxElDeg ?? 0) * 10),
+  ].join(":");
 }
 
 function NextPassMini({ pass, timeZone, inPass, title = null }) {
@@ -1789,7 +1847,7 @@ function App() {
   const [exporting, setExporting] = useState(false);
   const [viewMode, setViewMode] = useState("split");
   const [pinnedPassIndices, setPinnedPassIndices] = useState([]);
-  const [selectedOperationPassIndex, setSelectedOperationPassIndex] = useState(null);
+  const [selectedOperationPassKeys, setSelectedOperationPassKeys] = useState([]);
   const [passWindowMode, setPassWindowMode] = useState("1day");
   const [passDate, setPassDate] = useState(() => formatYmdInZone(new Date(), initialConfig.ops.timezone || "Asia/Tokyo"));
   const [csvDate, setCsvDate] = useState(() => formatYmdInZone(new Date(), initialConfig.ops.timezone || "Asia/Tokyo"));
@@ -1825,7 +1883,7 @@ function App() {
 
   useEffect(() => {
     setPinnedPassIndices([]);
-    setSelectedOperationPassIndex(null);
+    setSelectedOperationPassKeys([]);
   }, [selectedSatId, selectedStationId, passWindowMode, passDate]);
 
   const selectedState = selectedSat ? computeSatState(selectedSat, now) : null;
@@ -1843,10 +1901,8 @@ function App() {
   }, [selectedSat, selectedStation, predictionStartDate, effectivePredictionHorizonHours, appConfig.predictionStepSec]);
 
   useEffect(() => {
-    if (selectedOperationPassIndex !== null && !passes[selectedOperationPassIndex]) {
-      setSelectedOperationPassIndex(null);
-    }
-  }, [passes, selectedOperationPassIndex]);
+    setSelectedOperationPassKeys((prev) => prev.filter((key) => passes.some((pass) => passStableKey(pass) === key)));
+  }, [passes]);
 
   const activePassIndex = passes.findIndex((pass) => now >= pass.aos && now <= pass.los);
   const activePass = activePassIndex >= 0 ? passes[activePassIndex] : null;
@@ -1875,13 +1931,20 @@ function App() {
       .filter(Boolean);
   }, [displayedSatellites, selectedStation, selectedSat, now]);
   const radarPassLegendItems = radarPassSeries.map((series) => `${series.label} AOS ${formatIsoInZone(series.pass.aos, opsConfig.timezone || "Asia/Tokyo")} / MaxEL ${series.pass.maxElDeg.toFixed(1)} deg`);
-  const selectedOperationPass = Number.isInteger(selectedOperationPassIndex) ? passes[selectedOperationPassIndex] : null;
+  const operationPassEntries = selectedOperationPassKeys
+    .map((key) => {
+      const index = passes.findIndex((pass) => passStableKey(pass) === key);
+      return index >= 0 ? { key, index, pass: passes[index] } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.pass.aos.getTime() - b.pass.aos.getTime());
+  const operationTimerEntry = operationPassEntries.find((entry) => now <= entry.pass.los) || operationPassEntries[operationPassEntries.length - 1] || null;
   const passTimer = buildPassTimer(
     passes,
     now,
     opsConfig.timezone || "Asia/Tokyo",
-    selectedOperationPass,
-    selectedOperationPass ? `OPS #${selectedOperationPassIndex + 1}` : null
+    operationTimerEntry?.pass || null,
+    operationTimerEntry ? `OPS #${operationTimerEntry.index + 1}/${operationPassEntries.length}` : null
   );
 
   function applyNormalizedConfig(config) {
@@ -2078,12 +2141,21 @@ function App() {
     setPinnedPassIndices((prev) => prev.includes(index) ? prev.filter((item) => item !== index) : [...prev, index].sort((a, b) => a - b));
   }
 
-  function toggleOperationPass(index) {
-    setSelectedOperationPassIndex((prev) => prev === index ? null : index);
+  function toggleOperationPass(passKey) {
+    if (!passKey) return;
+    setSelectedOperationPassKeys((prev) => {
+      if (prev.includes(passKey)) return prev.filter((key) => key !== passKey);
+      const next = [...prev, passKey];
+      return next.sort((a, b) => {
+        const pa = passes.find((pass) => passStableKey(pass) === a);
+        const pb = passes.find((pass) => passStableKey(pass) === b);
+        return (pa?.aos?.getTime?.() || 0) - (pb?.aos?.getTime?.() || 0);
+      });
+    });
   }
 
   async function copyPassTableText() {
-    const text = buildPassCopyText(passes, opsConfig.timezone || "Asia/Tokyo");
+    const text = buildPassCopyText(passes, opsConfig.timezone || "Asia/Tokyo", selectedOperationPassKeys);
     try {
       await navigator.clipboard.writeText(text);
       setConfigMessage("パス予測テキストをクリップボードにコピーしました。");
@@ -2165,6 +2237,7 @@ function App() {
               <div className="legend-title">{radarPassLegendItems.length ? radarPassLegendItems.join(" / ") : "No visible pass selected"}</div>
               <span className="legend-line solid" /> <span>SUNLIT</span>
               <span className="legend-line dashed" /> <span>ECLIPSE</span>
+              <span className="legend-line nonvisible" /> <span>NON-VISIBLE</span>
               {pinnedPassIndices.length ? <span className="status-pill ok">{pinnedPassIndices.length} SELECTED</span> : <span className="status-pill">AUTO</span>}
             </div>
             <div className="radar-toolbar">
@@ -2211,7 +2284,7 @@ function App() {
         onPassDateChange={setPassDate}
         timeZone={opsConfig.timezone || "Asia/Tokyo"}
         selectedPassIndices={pinnedPassIndices}
-        selectedOperationPassIndex={selectedOperationPassIndex}
+        selectedOperationPassKeys={selectedOperationPassKeys}
         onSelectPass={toggleSelectedRadarPass}
         onSelectOperationPass={toggleOperationPass}
         onCopyPassText={copyPassTableText}

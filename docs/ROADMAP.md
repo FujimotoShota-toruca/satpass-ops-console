@@ -124,3 +124,16 @@
 
 - Doppler CSV Output を全幅の操作ストリップとして再配置しました。
 - 衛星名・地上局名・日付選択・ZIP出力ボタンが100%表示時にも潰れにくいよう、チップ表示と折り返しレイアウトに変更しました。
+
+## v0.18.0
+
+- Ops pass reservation toggle in Visible Passes.
+- Stable pass-key based PASS TIMER target selection.
+- Radar chart rendering separated into SUNLIT / ECLIPSE / NON-VISIBLE segments.
+
+## v0.19.0
+
+- Multiple operation-pass reservations are supported from the `Ops` column.
+- `PASS TIMER` follows the reserved operation schedule and targets the next reserved pass whose LOS has not passed.
+- `Text Copy` now includes `[運用]` / `[非運用]` labels for each pass.
+- Radar non-visible path segments are forced to thin dashed rendering.

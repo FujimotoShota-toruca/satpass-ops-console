@@ -360,3 +360,15 @@ orbit_track:
 
 - Doppler CSV Output を全幅の操作ストリップとして再配置しました。
 - 衛星名・地上局名・日付選択・ZIP出力ボタンが100%表示時にも潰れにくいよう、チップ表示と折り返しレイアウトに変更しました。
+
+## v0.18.0 update
+
+- Visible Passes の Ops 列を、PASS TIMER 用の運用予約トグルとして明確化しました。
+- Ops 予約は pass index ではなく AOS/LOS/MaxEL 由来の安定キーで管理します。
+- 予約済みパスがある場合、PASS TIMER はそのパスの AOS/LOS/DONE を優先表示します。
+- Radar Chart は可視区間だけでなく、AOS/LOS 前後の非可視側を破線で表示します。
+- Radar Chart の日照区間は実線、蝕区間は破線、非可視側は薄い破線で表示します。
+
+## v0.19.0 note
+
+`Visible Passes` の `Ops` 列は複数選択に対応しています。予約済みパスがある場合、`PASS TIMER` は予約順に次の運用パスを対象にします。`Text Copy` では各パスに `[運用]` / `[非運用]` が付与されます。
