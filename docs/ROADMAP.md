@@ -137,3 +137,10 @@
 - `PASS TIMER` follows the reserved operation schedule and targets the next reserved pass whose LOS has not passed.
 - `Text Copy` now includes `[運用]` / `[非運用]` labels for each pass.
 - Radar non-visible path segments are forced to thin dashed rendering.
+
+
+## v0.20.0
+
+- URL取得型YAMLを読み込んだ直後に衛星表示が空になる問題を回避しました。
+- TLE URLのみの設定では、Fetch / Update TLE 実行前にデフォルトTLEを暫定表示します。
+- 設定適用メッセージに、TLE URL取得が必要な場合の案内を追加しました。

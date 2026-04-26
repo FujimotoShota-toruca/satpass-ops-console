@@ -375,7 +375,8 @@ function normalizeConfig(rawInput) {
   } else if (raw.satellite) {
     satellites = [normalizeSatellite(raw.satellite, 0)].filter((sat) => sat.line1 && sat.line2);
   } else if (tleSources.length > 0 && !hasUserDefinedTle(raw)) {
-    satellites = [];
+    const parsed = parseTleBlock(DEFAULT_RAW_CONFIG.tle);
+    satellites = [{ id: "sat-1", name: parsed.name, line1: parsed.line1, line2: parsed.line2, color: SAT_COLORS[0] }];
   } else {
     try {
       const parsed = parseTleBlock(merged.tle);
@@ -1962,7 +1963,9 @@ function App() {
     setCsvDate(formatYmdInZone(new Date(), config.ops.timezone || "Asia/Tokyo"));
     const text = dumpYaml(exportableConfig(config.app, config.ops, config.map, config.radar, config.orbitTrack, config.tleSources || [], config.satellites[0], config.groundStations[0], config.satellites, config.groundStations));
     setConfigText(text);
-    setConfigMessage("設定を適用しました。");
+    setConfigMessage(config.tleSources?.length
+      ? "設定を適用しました。TLE URLを使う場合は、次に Fetch / Update TLE を押してください。"
+      : "設定を適用しました。");
   }
 
   function applyConfigText() {
