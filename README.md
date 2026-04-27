@@ -425,3 +425,11 @@ orbit_track:
 - `YamlSpecification.md` / `docs/YAML_SPEC.md` を追加。
 - `config/minimal_iss_operation.yaml` と `config/kakushin_rising_url_operation.yaml` を追加。
 - UI上のTLE追加欄を `Quick Satellite Add` として説明し、YAML一括設定が主導線であることを明確化。
+
+## v0.25.0 UI update
+
+- `YAML Setup` modal was reorganized into a VSCode-like setup workbench.
+- Top: quick satellite add area for `name@URL` lists or 3-line TLE blocks.
+- Middle: YAML editor with `Import YAML`, `Apply YAML`, `Fetch YAML URLs`, and `Sync Current` controls.
+- Bottom: advanced display settings and other tools.
+- The intended operation remains YAML-first: load one mission YAML, fetch URL-based TLEs when needed, then use the operation screen for tracking/display switching.

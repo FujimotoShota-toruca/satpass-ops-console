@@ -74,6 +74,7 @@ ground_stations:
 satellites:
   - id: iss
     name: ISS (ZARYA)
+    color: "#22c55e"
     tle: |
       ISS (ZARYA)
       1 25544U 98067A   26001.50000000  .00010000  00000+0  18000-3 0  9990

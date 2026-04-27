@@ -175,3 +175,9 @@
 - `YamlSpecification.md` / `docs/YAML_SPEC.md` を追加。
 - `config/minimal_iss_operation.yaml` と `config/kakushin_rising_url_operation.yaml` を追加。
 - Quick Satellite Addの位置づけを、YAML一括設定を補完する衛星追加補助機能として明確化。
+
+## v0.25.0
+
+- Reworked the setup modal into a VSCode-like three-zone layout: Quick TLE Add, YAML Editor, and Advanced/Tools.
+- Moved URL TLE fetching next to the YAML editor to make the `tle_sources` workflow more explicit.
+- Preserved operation-screen controls for tracking satellite, ground station, and visible satellite selection.

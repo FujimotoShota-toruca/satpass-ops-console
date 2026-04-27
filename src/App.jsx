@@ -1849,8 +1849,8 @@ function SettingsDialog({ open, onClose, children }) {
       <section className="settings-modal-window" role="dialog" aria-modal="true" aria-label="Mission setup and YAML settings">
         <div className="settings-modal-header">
           <div>
-            <h2>YAML Setup / Optional Satellite Add</h2>
-            <p className="muted small">基本はYAML一括設定です。追加で衛星を試す場合だけ、Quick Satellite Addを使います。追尾衛星・表示衛星の切替は運用画面側で行います。</p>
+            <h2>YAML Setup</h2>
+            <p className="muted small">VSCode風に、上から Quick TLE Add / YAML Editor / Advanced Settings の順に配置しています。設定の正本はYAMLです。</p>
           </div>
           <button className="button compact" onClick={onClose}>Close</button>
         </div>
@@ -1868,15 +1868,6 @@ function MissionSetupPanel({
   onFetchTleSources,
   tleSourceCount,
   exporting,
-  selectedSat,
-  satellites,
-  onSelectedSatChange,
-  selectedStation,
-  stations,
-  onSelectedStationChange,
-  visibleSatIds,
-  onToggleVisibleSatellite,
-  onSetAllVisible,
   onImportConfigFile,
   onDownloadTemplate,
   onDownloadTleSourceTemplate,
@@ -1884,53 +1875,120 @@ function MissionSetupPanel({
   onClearLocalConfig,
   onOpenGitHubRepository,
   configMessage,
+  configText,
+  onConfigTextChange,
+  onApplyConfigText,
+  onSyncEditorFromCurrent,
+  onApplyRecommendedMap,
+  recommendedMaps,
+  onUseBundledMap,
+  onImportMapBackgroundFile,
+  onImportRadarBackgroundFile,
+  orbitTrackColorMode,
+  onOrbitTrackColorModeChange,
 }) {
   return (
-    <section className="panel mission-setup-panel">
-      <div className="panel-title-row mission-title-row">
-        <div>
-          <h2>Mission Setup</h2>
-          <p className="muted small">運用設定はYAML一括読み込みが基本です。Quick Satellite Addは、後から衛星を試しに追加するための補助欄です。</p>
+    <section className="setup-workbench">
+      <section className="setup-row setup-quick-row">
+        <div className="setup-section-head">
+          <div>
+            <div className="setup-section-kicker">Quick satellite add</div>
+            <h3>Paste TLE URL list or 3-line TLE</h3>
+            <p className="muted small">通常はYAML一括設定を使います。ここは運用中に衛星を追加で試すための補助欄です。</p>
+          </div>
+          <div className="mission-status-chip">TLE sources: <strong>{tleSourceCount}</strong></div>
         </div>
-        <div className="mission-status-chip">TLE sources: <strong>{tleSourceCount}</strong></div>
-      </div>
-
-      <div className="mission-setup-grid">
-        <div className="quick-tle-card">
-          <div className="step-label">Optional / Quick Satellite Add</div>
-          <label className="quick-tle-label">
-            Paste name@URL list or 3-line TLE here
-            <textarea
-              className="quick-tle-textarea mono"
-              spellCheck="false"
-              value={quickTleText}
-              onChange={(event) => onQuickTleTextChange(event.target.value)}
-              placeholder={'ISS (ZARYA)@https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=TLE\n\nまたは\nSAT NAME\n1 .....\n2 .....'}
-            />
-          </label>
-          <div className="quick-action-row">
+        <div className="setup-quick-grid">
+          <textarea
+            className="setup-quick-textarea mono"
+            spellCheck="false"
+            value={quickTleText}
+            onChange={(event) => onQuickTleTextChange(event.target.value)}
+            placeholder={'ISS (ZARYA)@https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=TLE\n\nまたは\nSAT NAME\n1 .....\n2 .....'}
+          />
+          <div className="setup-quick-actions">
             <button className="button primary" onClick={onAddAndFetchQuickTle} disabled={exporting}>Add & Fetch</button>
             <button className="button" onClick={onAddQuickTle}>Add to YAML</button>
-            <button className="button" onClick={onFetchTleSources} disabled={exporting || !tleSourceCount}>Fetch YAML URLs</button>
           </div>
         </div>
+      </section>
 
-        <div className="yaml-tools-card">
-          <div className="step-label">2 / YAML & Tools</div>
-          <div className="quick-action-grid">
+      <section className="setup-row setup-editor-row">
+        <div className="setup-section-head editor-head">
+          <div>
+            <div className="setup-section-kicker">YAML editor</div>
+            <h3>Mission configuration</h3>
+            <p className="muted small">運用設定の正本です。YAML読み込み、直接編集、URL TLEのFetchをここで行います。</p>
+          </div>
+          <div className="setup-toolbar">
             <label className="button file-button primary">
               Import YAML
               <input type="file" multiple accept=".yaml,.yml,.json,application/x-yaml,application/json" onChange={onImportConfigFile} />
             </label>
+            <button className="button primary" onClick={onApplyConfigText}>Apply YAML</button>
+            <button className="button" onClick={onFetchTleSources} disabled={exporting || !tleSourceCount}>Fetch YAML URLs</button>
+            <button className="button" onClick={onSyncEditorFromCurrent}>Sync Current</button>
+          </div>
+        </div>
+        <textarea
+          className="setup-yaml-editor mono"
+          spellCheck="false"
+          value={configText}
+          onChange={(event) => onConfigTextChange(event.target.value)}
+          aria-label="YAML configuration editor"
+        />
+        <div className="setup-message-line">{configMessage}</div>
+      </section>
+
+      <section className="setup-row setup-bottom-row">
+        <section className="setup-subpanel">
+          <div className="setup-section-kicker">Advanced display settings</div>
+          <h3>Map / Radar / Track</h3>
+          <div className="setup-form-grid">
+            <label>
+              Map Preset
+              <select defaultValue="" onChange={(event) => onApplyRecommendedMap(event.target.value)}>
+                <option value="" disabled>Recommended map URL</option>
+                {recommendedMaps.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
+              </select>
+            </label>
+            <label>
+              Orbit Track Color
+              <select value={orbitTrackColorMode} onChange={(event) => onOrbitTrackColorModeChange(event.target.value)}>
+                <option value="sunlight">Sunlight / eclipse</option>
+                <option value="satellite">Satellite color</option>
+              </select>
+            </label>
+          </div>
+          <div className="setup-button-grid">
+            <button className="button" onClick={onUseBundledMap}>Bundled Map</button>
+            <label className="button file-button">
+              Upload Map Image
+              <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={onImportMapBackgroundFile} />
+            </label>
+            <label className="button file-button">
+              Upload Skyline
+              <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={onImportRadarBackgroundFile} />
+            </label>
+          </div>
+        </section>
+
+        <section className="setup-subpanel">
+          <div className="setup-section-kicker">Other tools</div>
+          <h3>Templates / Export / Privacy</h3>
+          <div className="setup-button-grid tools-grid">
             <button className="button" onClick={onExportYaml}>Export YAML</button>
             <button className="button" onClick={onDownloadTemplate}>Template</button>
             <button className="button" onClick={onDownloadTleSourceTemplate}>TLE URL YAML</button>
             <button className="button github-button" onClick={onOpenGitHubRepository}>GitHub</button>
             <button className="button danger" onClick={onClearLocalConfig}>Clear Local</button>
           </div>
-          <div className="config-message-box">{configMessage}</div>
-        </div>
-      </div>
+          <div className="app-tools-box compact-privacy-box">
+            <div className="muted tiny">Privacy / data flow</div>
+            <p className="privacy-note">YAML/ローカル画像はブラウザ内で処理されます。外部通信はTLE取得URL・外部地図/背景画像URLへのGETリクエストが中心です。</p>
+          </div>
+        </section>
+      </section>
     </section>
   );
 }
@@ -2457,58 +2515,18 @@ function App() {
           onClearLocalConfig={clearLocalConfig}
           onOpenGitHubRepository={openGitHubRepository}
           configMessage={configMessage}
+          configText={configText}
+          onConfigTextChange={setConfigText}
+          onApplyConfigText={applyConfigText}
+          onSyncEditorFromCurrent={syncEditorFromCurrent}
+          onApplyRecommendedMap={applyRecommendedMap}
+          recommendedMaps={RECOMMENDED_MAPS}
+          onUseBundledMap={useBundledMap}
+          onImportMapBackgroundFile={importMapBackgroundFile}
+          onImportRadarBackgroundFile={importRadarBackgroundFile}
+          orbitTrackColorMode={orbitTrackConfig.colorMode}
+          onOrbitTrackColorModeChange={(value) => setOrbitTrackConfig((prev) => ({ ...prev, colorMode: value }))}
         />
-          <section className="config-grid settings-modal-config-grid">
-          <section className="panel control-panel">
-            <h2>Advanced Display Settings</h2>
-            <p className="muted small">地図・レーダー背景・軌道色分けなど、表示系だけを調整します。追尾衛星・表示衛星は運用画面側で切り替えます。</p>
-            <label>
-              Map Preset
-              <select defaultValue="" onChange={(e) => applyRecommendedMap(e.target.value)}>
-                <option value="" disabled>Recommended map URL</option>
-                {RECOMMENDED_MAPS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
-              </select>
-            </label>
-            <div className="button-row">
-              <button className="button compact" onClick={useBundledMap}>Bundled Map</button>
-              <label className="button compact file-button">
-                Upload Map Image
-                <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={importMapBackgroundFile} />
-              </label>
-              <label className="button compact file-button">
-                Upload Skyline
-                <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={importRadarBackgroundFile} />
-              </label>
-            </div>
-            <label>
-              Orbit Track Color
-              <select value={orbitTrackConfig.colorMode} onChange={(e) => setOrbitTrackConfig((prev) => ({ ...prev, colorMode: e.target.value }))}>
-                <option value="sunlight">Sunlight / eclipse</option>
-                <option value="satellite">Satellite color</option>
-              </select>
-            </label>
-            <div className="app-tools-box">
-              <div className="muted tiny">Privacy / data flow</div>
-              <p className="privacy-note">YAML/ローカル画像はブラウザ内で処理されます。外部通信はTLE取得URL・外部地図/背景画像URLへのGETリクエストが中心です。</p>
-            </div>
-          </section>
-
-          <details className="panel config-panel">
-            <summary>
-              <span>YAML Configuration</span>
-              <span className="muted small">click to edit</span>
-            </summary>
-            <p className="muted config-message">{configMessage}</p>
-            <div className="button-row">
-              <button className="button primary" onClick={applyConfigText}>Apply YAML</button>
-              <button className="button" onClick={syncEditorFromCurrent}>Sync Current</button>
-              <button className="button" onClick={downloadTemplate}>Download Template</button>
-              <button className="button" onClick={downloadTleSourceTemplate}>Download TLE URL YAML</button>
-              <button className="button danger" onClick={clearLocalConfig}>Clear Local Config</button>
-            </div>
-            <textarea className="config-textarea mono" spellCheck="false" value={configText} onChange={(e) => setConfigText(e.target.value)} aria-label="YAML configuration editor" />
-          </details>
-        </section>
 
       </SettingsDialog>
 
