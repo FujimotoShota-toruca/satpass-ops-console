@@ -151,3 +151,10 @@
 - Added quick TLE paste workflow: URL list / 3-line TLE -> YAML -> optional fetch.
 - Moved target selection and YAML tool buttons into a single, more discoverable area.
 - Added `OperationalPreparationProcedures.md` to the project root.
+
+
+## v0.22.0
+
+- 設定系UIをモーダルウィンドウに集約。
+- 運用画面からTLE追加/YAML編集/表示設定を分離し、常時表示領域を削減。
+- 今後の候補: 設定モーダル内のタブ化（TLE / Target / YAML / Display / Privacy）。
