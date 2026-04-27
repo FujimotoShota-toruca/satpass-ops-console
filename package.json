@@ -1,6 +1,6 @@
 {
   "name": "satpass-ops-console",
-  "version": "0.26.2",
+  "version": "0.27.0",
   "private": false,
   "type": "module",
   "scripts": {
@@ -10,14 +10,13 @@
   },
   "dependencies": {
     "@vitejs/plugin-react": "4.3.4",
-    "vite": "5.4.11",
+    "js-yaml": "4.1.0",
+    "jszip": "3.10.1",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "satellite.js": "5.0.0",
-    "js-yaml": "4.1.0",
-    "jszip": "3.10.1"
+    "vite": "5.4.11"
   },
-  "devDependencies": {},
   "overrides": {
     "satellite.js": "5.0.0"
   }

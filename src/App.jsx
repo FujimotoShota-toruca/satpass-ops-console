@@ -1319,6 +1319,71 @@ function radarPointFromAzEl(azDeg, elDeg, cx, cy, rMax) {
   return { x: cx + radial * Math.cos(theta), y: cy + radial * Math.sin(theta) };
 }
 
+function splitDelimitedLine(line) {
+  if (line.includes(",")) return line.split(",").map((item) => item.trim());
+  if (line.includes("	")) return line.split("	").map((item) => item.trim());
+  return line.trim().split(/\s+/).map((item) => item.trim());
+}
+
+function findColumnIndex(headers, candidates) {
+  const normalized = headers.map((header) => safeString(header).trim().toLowerCase().replace(/[\s_\-\[\]()\.]/g, ""));
+  return normalized.findIndex((header) => candidates.some((candidate) => header === candidate || header.includes(candidate)));
+}
+
+function parseSkylineCsv(text) {
+  const lines = safeString(text)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"));
+  if (!lines.length) return [];
+
+  const first = splitDelimitedLine(lines[0]);
+  const firstNumbers = first.map((value) => Number(value));
+  const hasHeader = firstNumbers.some((value) => !Number.isFinite(value));
+  let azIndex = 0;
+  let elIndex = 1;
+  let dataLines = lines;
+
+  if (hasHeader) {
+    const headers = first;
+    const detectedAz = findColumnIndex(headers, ["az", "azimuth", "azimuthdeg", "azdeg", "bearing", "方位", "方位角"]);
+    const detectedEl = findColumnIndex(headers, ["el", "elev", "elevation", "elevationdeg", "eldeg", "elevdeg", "altitude", "仰角"]);
+    azIndex = detectedAz >= 0 ? detectedAz : 0;
+    elIndex = detectedEl >= 0 ? detectedEl : 1;
+    dataLines = lines.slice(1);
+  }
+
+  const rows = dataLines
+    .map((line) => splitDelimitedLine(line))
+    .map((cols) => {
+      const azRaw = Number(cols[azIndex]);
+      const elRaw = Number(cols[elIndex]);
+      if (!Number.isFinite(azRaw) || !Number.isFinite(elRaw)) return null;
+      return { azDeg: ((azRaw % 360) + 360) % 360, elDeg: clamp(elRaw, 0, 90) };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.azDeg - b.azDeg);
+
+  const byAz = new Map();
+  rows.forEach((row) => byAz.set(row.azDeg.toFixed(3), row));
+  return Array.from(byAz.values()).sort((a, b) => a.azDeg - b.azDeg);
+}
+
+function skylinePathFromRows(rows, cx, cy, rMax) {
+  if (!Array.isArray(rows) || rows.length < 2) return "";
+  const normalized = [...rows].sort((a, b) => a.azDeg - b.azDeg);
+  const closed = [...normalized];
+  if (closed.length && closed[closed.length - 1].azDeg < 359.999) {
+    closed.push({ ...closed[0], azDeg: closed[0].azDeg + 360 });
+  }
+  return closed.map((row, idx) => {
+    const az = row.azDeg >= 360 ? row.azDeg - 360 : row.azDeg;
+    const p = radarPointFromAzEl(az, row.elDeg, cx, cy, rMax);
+    return `${idx === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+  }).join(" ");
+}
+
+
 function sampleRadarPath(tle, station, pass, stepSec = 20) {
   if (!tle || !station || !pass?.aos || !pass?.los) return [];
   const rows = [];
@@ -1398,7 +1463,7 @@ function buildRadarRenderSegments(rows, cx, cy, rMax) {
   }));
 }
 
-function RadarChart({ look, station, radarConfig, passSeries = [], satMarkers = [], selectedSatName }) {
+function RadarChart({ look, station, radarConfig, passSeries = [], satMarkers = [], selectedSatName, skylineProfile = null }) {
   const size = 300;
   const cx = size / 2;
   const cy = size / 2;
@@ -1407,6 +1472,8 @@ function RadarChart({ look, station, radarConfig, passSeries = [], satMarkers = 
   const az = look?.azDeg ?? 0;
   const marker = radarPointFromAzEl(az, el, cx, cy, rMax);
   const normalizedSeries = Array.isArray(passSeries) ? passSeries : [];
+  const skylineRows = skylineProfile?.rows || radarConfig?.skylineProfile || [];
+  const skylinePath = skylinePathFromRows(skylineRows, cx, cy, rMax);
 
   return (
     <svg viewBox={`0 0 ${size} ${size}`} className="radar">
@@ -1440,6 +1507,11 @@ function RadarChart({ look, station, radarConfig, passSeries = [], satMarkers = 
       <text x={size - 20} y={cy + 5} textAnchor="middle" className="radar-label">E</text>
       <text x={cx} y={size - 14} textAnchor="middle" className="radar-label">S</text>
       <text x="20" y={cy + 5} textAnchor="middle" className="radar-label">W</text>
+      {skylinePath ? (
+        <path d={skylinePath} className="radar-skyline-csv">
+          <title>{`Skyline CSV: ${skylineProfile?.name || "azimuth/elevation profile"}`}</title>
+        </path>
+      ) : null}
       {normalizedSeries.map((series, seriesIndex) => {
         const rows = series.rows || [];
         const segments = buildRadarRenderSegments(rows, cx, cy, rMax);
@@ -1704,7 +1776,7 @@ function PassTable({
                       className={opsSelected ? "mini-pill selected" : "mini-pill"}
                       onClick={(event) => {
                         event.stopPropagation();
-                        onSelectOperationPass?.(operationKey);
+                        onSelectOperationPass?.(operationKey, pass, i);
                       }}
                       title={opsSelected ? "Remove this pass from the operation schedule" : "Add this pass to the operation schedule"}
                     >
@@ -1746,6 +1818,30 @@ function passStableKey(pass) {
     pass.los.getTime(),
     Math.round((pass.maxElDeg ?? 0) * 10),
   ].join(":");
+}
+
+function passToSnapshot(pass) {
+  if (!pass) return null;
+  return {
+    aos: pass.aos?.toISOString?.() || null,
+    los: pass.los?.toISOString?.() || null,
+    maxElTime: pass.maxElTime?.toISOString?.() || null,
+    maxElDeg: safeNumber(pass.maxElDeg, 0),
+    minRangeKm: safeNumber(pass.minRangeKm, 0),
+    rangeAtMaxElKm: safeNumber(pass.rangeAtMaxElKm ?? pass.minRangeKm, 0),
+  };
+}
+
+function revivePassSnapshot(snapshot) {
+  if (!snapshot?.aos || !snapshot?.los) return null;
+  return {
+    aos: new Date(snapshot.aos),
+    los: new Date(snapshot.los),
+    maxElTime: snapshot.maxElTime ? new Date(snapshot.maxElTime) : new Date(snapshot.aos),
+    maxElDeg: safeNumber(snapshot.maxElDeg, 0),
+    minRangeKm: safeNumber(snapshot.minRangeKm, snapshot.rangeAtMaxElKm ?? 0),
+    rangeAtMaxElKm: safeNumber(snapshot.rangeAtMaxElKm, snapshot.minRangeKm ?? 0),
+  };
 }
 
 function NextPassMini({ pass, timeZone, inPass, title = null }) {
@@ -1930,6 +2026,8 @@ function MissionSetupPanel({
   onUseBundledMap,
   onImportMapBackgroundFile,
   onImportRadarBackgroundFile,
+  onImportSkylineCsvFile,
+  skylineProfile,
   orbitTrackColorMode,
   onOrbitTrackColorModeChange,
   missionStatusItems = [],
@@ -2037,6 +2135,11 @@ function MissionSetupPanel({
               Upload Skyline
               <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={onImportRadarBackgroundFile} />
             </label>
+            <label className="button file-button">
+              Upload Skyline CSV
+              <input type="file" accept=".csv,text/csv,text/plain" onChange={onImportSkylineCsvFile} />
+            </label>
+            {skylineProfile?.rows?.length ? <span className="status-pill ok skyline-csv-status">Skyline CSV {skylineProfile.rows.length} pts</span> : null}
           </div>
         </section>
 
@@ -2101,6 +2204,8 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pinnedPassIndices, setPinnedPassIndices] = useState([]);
   const [selectedOperationPassKeys, setSelectedOperationPassKeys] = useState([]);
+  const [operationPassRegistry, setOperationPassRegistry] = useState({});
+  const [skylineProfile, setSkylineProfile] = useState(null);
   const [passWindowMode, setPassWindowMode] = useState("1day");
   const [passDate, setPassDate] = useState(() => formatYmdInZone(new Date(), initialConfig.ops.timezone || "Asia/Tokyo"));
   const [csvDate, setCsvDate] = useState(() => formatYmdInZone(new Date(), initialConfig.ops.timezone || "Asia/Tokyo"));
@@ -2136,7 +2241,6 @@ function App() {
 
   useEffect(() => {
     setPinnedPassIndices([]);
-    setSelectedOperationPassKeys([]);
   }, [selectedSatId, selectedStationId, passWindowMode, passDate]);
 
   const selectedState = selectedSat ? computeSatState(selectedSat, now) : null;
@@ -2152,10 +2256,6 @@ function App() {
     if (!selectedSat || !selectedStation) return [];
     return predictPasses(selectedSat, selectedStation, predictionStartDate, effectivePredictionHorizonHours, safeNumber(appConfig.predictionStepSec, 30));
   }, [selectedSat, selectedStation, predictionStartDate, effectivePredictionHorizonHours, appConfig.predictionStepSec]);
-
-  useEffect(() => {
-    setSelectedOperationPassKeys((prev) => prev.filter((key) => passes.some((pass) => passStableKey(pass) === key)));
-  }, [passes]);
 
   const activePassIndex = passes.findIndex((pass) => now >= pass.aos && now <= pass.los);
   const activePass = activePassIndex >= 0 ? passes[activePassIndex] : null;
@@ -2186,8 +2286,15 @@ function App() {
   const radarPassLegendItems = radarPassSeries.map((series) => `${series.label} AOS ${formatIsoInZone(series.pass.aos, opsConfig.timezone || "Asia/Tokyo")} / MaxEL ${series.pass.maxElDeg.toFixed(1)} deg`);
   const operationPassEntries = selectedOperationPassKeys
     .map((key) => {
-      const index = passes.findIndex((pass) => passStableKey(pass) === key);
-      return index >= 0 ? { key, index, pass: passes[index] } : null;
+      const registryItem = operationPassRegistry[key];
+      const visibleIndex = passes.findIndex((pass) => passStableKey(pass) === key);
+      const visiblePass = visibleIndex >= 0 ? passes[visibleIndex] : null;
+      const snapshotPass = registryItem?.pass ? revivePassSnapshot(registryItem.pass) : null;
+      const pass = visiblePass || snapshotPass;
+      if (!pass) return null;
+      if (registryItem?.satId && registryItem.satId !== selectedSatId) return null;
+      if (registryItem?.stationId && registryItem.stationId !== selectedStationId) return null;
+      return { key, index: visibleIndex >= 0 ? visibleIndex : registryItem?.displayIndex ?? -1, pass, fromVisibleTable: visibleIndex >= 0 };
     })
     .filter(Boolean)
     .sort((a, b) => a.pass.aos.getTime() - b.pass.aos.getTime());
@@ -2375,6 +2482,25 @@ function App() {
     reader.readAsDataURL(file);
   }
 
+  function importSkylineCsvFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const rows = parseSkylineCsv(String(reader.result || ""));
+        if (rows.length < 2) throw new Error("CSVから2点以上の方位角/仰角データを読み取れませんでした。");
+        setSkylineProfile({ name: file.name, rows });
+        setConfigMessage(`スカイラインCSVを読み込みました: ${file.name} / ${rows.length} points`);
+      } catch (error) {
+        setConfigMessage(`スカイラインCSVの読み込みに失敗しました: ${error.message}`);
+      } finally {
+        event.target.value = "";
+      }
+    };
+    reader.readAsText(file);
+  }
+
   function useBundledMap() {
     setMapConfig((prev) => ({
       ...prev,
@@ -2560,14 +2686,34 @@ function App() {
     setPinnedPassIndices((prev) => prev.includes(index) ? prev.filter((item) => item !== index) : [...prev, index].sort((a, b) => a - b));
   }
 
-  function toggleOperationPass(passKey) {
+  function toggleOperationPass(passKey, pass = null, displayIndex = -1) {
     if (!passKey) return;
+    setOperationPassRegistry((prev) => {
+      if (prev[passKey]) {
+        const next = { ...prev };
+        delete next[passKey];
+        return next;
+      }
+      return {
+        ...prev,
+        [passKey]: {
+          key: passKey,
+          satId: selectedSatId,
+          stationId: selectedStationId,
+          satName: selectedSat?.name || "",
+          stationName: selectedStation?.name || "",
+          displayIndex,
+          pass: passToSnapshot(pass),
+          reservedAt: new Date().toISOString(),
+        },
+      };
+    });
     setSelectedOperationPassKeys((prev) => {
       if (prev.includes(passKey)) return prev.filter((key) => key !== passKey);
       const next = [...prev, passKey];
       return next.sort((a, b) => {
-        const pa = passes.find((pass) => passStableKey(pass) === a);
-        const pb = passes.find((pass) => passStableKey(pass) === b);
+        const pa = a === passKey ? pass : (operationPassRegistry[a]?.pass ? revivePassSnapshot(operationPassRegistry[a].pass) : passes.find((item) => passStableKey(item) === a));
+        const pb = b === passKey ? pass : (operationPassRegistry[b]?.pass ? revivePassSnapshot(operationPassRegistry[b].pass) : passes.find((item) => passStableKey(item) === b));
         return (pa?.aos?.getTime?.() || 0) - (pb?.aos?.getTime?.() || 0);
       });
     });
@@ -2651,6 +2797,8 @@ function App() {
           onUseBundledMap={useBundledMap}
           onImportMapBackgroundFile={importMapBackgroundFile}
           onImportRadarBackgroundFile={importRadarBackgroundFile}
+          onImportSkylineCsvFile={importSkylineCsvFile}
+          skylineProfile={skylineProfile}
           orbitTrackColorMode={orbitTrackConfig.colorMode}
           onOrbitTrackColorModeChange={(value) => setOrbitTrackConfig((prev) => ({ ...prev, colorMode: value }))}
           missionStatusItems={missionStatusItems}
@@ -2680,7 +2828,7 @@ function App() {
               <h2>Radar Chart</h2>
               <span className={look?.visible ? "status-pill ok" : "status-pill ng"}>{look?.visible ? "VISIBLE" : "NOT VISIBLE"}</span>
             </div>
-            <RadarChart look={look} station={selectedStation} radarConfig={radarConfig} passSeries={radarPassSeries} satMarkers={radarSatMarkers} selectedSatName={selectedSat?.name} />
+            <RadarChart look={look} station={selectedStation} radarConfig={radarConfig} passSeries={radarPassSeries} satMarkers={radarSatMarkers} selectedSatName={selectedSat?.name} skylineProfile={skylineProfile} />
             <div className="radar-path-legend multi-radar-legend">
               <div className="legend-title">{radarPassLegendItems.length ? radarPassLegendItems.join(" / ") : "No visible pass selected"}</div>
               <span className="legend-line solid" /> <span>SUNLIT</span>
@@ -2690,10 +2838,15 @@ function App() {
             </div>
             <div className="radar-toolbar">
               <label className="button compact file-button">
-                Upload skyline
+                Upload skyline image
                 <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={importRadarBackgroundFile} />
               </label>
-              {radarConfig?.attribution ? <span className="muted tiny truncate">{radarConfig.attribution}</span> : <span className="muted tiny">skyline background optional</span>}
+              <label className="button compact file-button">
+                Upload skyline CSV
+                <input type="file" accept=".csv,text/csv,text/plain" onChange={importSkylineCsvFile} />
+              </label>
+              {skylineProfile?.rows?.length ? <span className="status-pill ok">Skyline CSV {skylineProfile.rows.length} pts</span> : null}
+              {radarConfig?.attribution ? <span className="muted tiny truncate">{radarConfig.attribution}</span> : <span className="muted tiny">skyline image/CSV optional</span>}
             </div>
           </section>
         ) : null}

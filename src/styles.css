@@ -2586,3 +2586,18 @@ td {
     grid-template-columns: 1fr;
   }
 }
+
+.radar-skyline-csv {
+  fill: none;
+  stroke: #f97316;
+  stroke-width: 2.2;
+  stroke-opacity: 0.95;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 5px rgba(249, 115, 22, 0.45));
+  pointer-events: none;
+}
+
+.skyline-csv-status {
+  align-self: center;
+}

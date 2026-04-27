@@ -454,3 +454,9 @@ orbit_track:
 ## v0.26.2
 
 - Fixed blank screen caused by missing mission status component/state wiring in v0.26.1.
+
+## v0.27.0 update
+
+- Ops予約を現在表示中のパス一覧だけに依存しないスナップショット管理に変更しました。Visible Passesの表示範囲外になった予約パスも、同じ追尾衛星・地上局ではPASS TIMERの対象として保持されます。
+- Radar Chartに方位角/仰角CSVによるスカイライン表示を追加しました。`Upload skyline CSV` から、`azimuth_deg,elevation_deg` または先頭2列が方位角[deg]・仰角[deg]のCSVを読み込めます。
+- 画像ベースのスカイライン背景とCSVベースのスカイライン線を併用できます。

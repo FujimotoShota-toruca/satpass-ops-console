@@ -202,3 +202,8 @@
 ## v0.26.2
 
 - Fixed blank screen caused by missing mission status component/state wiring in v0.26.1.
+
+## v0.27.0
+
+- Ops pass reservation now uses pass snapshots, so operation reservations do not disappear merely because a pass leaves the current visible table window.
+- Added skyline CSV overlay support for the radar chart. Accepted formats include `azimuth_deg,elevation_deg`, `az_deg,el_deg`, Japanese-like headers such as `方位角,仰角`, or simple two-column numeric CSV.
