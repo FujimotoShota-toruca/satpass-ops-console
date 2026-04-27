@@ -181,3 +181,24 @@
 - Reworked the setup modal into a VSCode-like three-zone layout: Quick TLE Add, YAML Editor, and Advanced/Tools.
 - Moved URL TLE fetching next to the YAML editor to make the `tle_sources` workflow more explicit.
 - Preserved operation-screen controls for tracking satellite, ground station, and visible satellite selection.
+
+## v0.26.0 update
+
+- Added setup status indicators for YAML, TLE URL fetch state, satellite count, ground-station count, tracking satellite, and ground station.
+- Clarified button labels: `Fetch Now & Add`, `Insert into YAML only`, `Fetch URL TLEs`, and `Sync from Current State`.
+- Added stronger Fetch guidance when `tle_sources` are present in YAML.
+- Reworked the operation layout to: realtime dashboard, map/radar, Tracking / Display, Visible Passes + Doppler CSV Output, and Detailed Information.
+
+
+
+## v0.26.1 UI Refinement
+
+- Operational screen order is now: real-time dashboard, map/radar, Tracking / Display, Visible Passes + Doppler CSV Output, Detailed Information.
+- Mission state display is shown inside the YAML setup dialog so the operation screen stays focused.
+- Button labels were clarified: `Fetch URL TLEs`, `Fetch Now & Add`, `Insert into YAML Only`, and `Sync from Current State`.
+- When `tle_sources` are present, the setup dialog shows an explicit fetch callout.
+
+
+## v0.26.2
+
+- Fixed blank screen caused by missing mission status component/state wiring in v0.26.1.

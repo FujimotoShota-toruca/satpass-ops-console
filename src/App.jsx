@@ -503,7 +503,7 @@ ground_stations:
 
 # 衛星情報。複数衛星に対応。
 # tle: | は 2行TLEでも3行TLEでも可。
-# tle_url / update_url / catnr を指定した衛星は、Fetch TLE URLs でCelesTrak等からTLEを取得できます。
+# tle_url / update_url / catnr を指定した衛星は、Fetch URL TLEs でCelesTrak等からTLEを取得できます。
 satellites:
   - id: iss
     name: ISS (ZARYA)
@@ -1807,7 +1807,7 @@ function OperationTargetPanel({
           <h2>Tracking / Display</h2>
           <p className="muted small">運用中に頻繁に触る追尾衛星・地上局・地図表示衛星だけをここで切り替えます。設定の正本はYAMLです。</p>
         </div>
-        <button className="button compact setup-button" onClick={onOpenSetup}>YAML Setup</button>
+        <button className="button compact setup-button" onClick={onOpenSetup}>YAML Setup / TLE Fetch</button>
       </div>
       <div className="operation-target-grid">
         <label>
@@ -1840,6 +1840,47 @@ function ViewModeSelector({ viewMode, onChange }) {
 }
 
 
+
+function MissionStatusBar({ items = [] }) {
+  return (
+    <div className="mission-status-strip" aria-label="Mission setup status">
+      {items.map((item) => (
+        <div key={item.label} className={`mission-status-item ${item.state || "neutral"}`}>
+          <span className="mission-status-label">{item.label}</span>
+          <strong>{item.value}</strong>
+          {item.hint ? <small>{item.hint}</small> : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SetupStatusBar({ tleSourceCount, satelliteCount, stationCount, selectedSatName, selectedStationName, tleFetchStatus }) {
+  const state = tleFetchStatus?.state || (tleSourceCount ? "not_fetched" : "not_required");
+  const label = state === "fetched"
+    ? `FETCHED ${tleFetchStatus?.success ?? 0}/${tleFetchStatus?.sourceCount ?? tleSourceCount}`
+    : state === "fetching"
+      ? `FETCHING 0/${tleFetchStatus?.sourceCount ?? tleSourceCount}`
+      : state === "failed"
+        ? `FETCH FAILED ${tleFetchStatus?.failed ?? 0}`
+        : tleSourceCount
+          ? `NEEDS FETCH ${tleSourceCount}`
+          : "DIRECT TLE / NO URL";
+  const tone = state === "fetched" ? "ok" : state === "fetching" ? "busy" : state === "failed" ? "ng" : (tleSourceCount ? "warn" : "ok");
+  const updated = tleFetchStatus?.timestamp ? new Date(tleFetchStatus.timestamp) : null;
+  return (
+    <div className="setup-status-bar" aria-label="YAML setup status">
+      <div className="setup-status-item ok"><span>YAML</span><strong>EDITOR READY</strong></div>
+      <div className={`setup-status-item ${tone}`}><span>TLE URL</span><strong>{label}</strong></div>
+      <div className="setup-status-item"><span>Satellites</span><strong>{satelliteCount}</strong></div>
+      <div className="setup-status-item"><span>Ground Stations</span><strong>{stationCount}</strong></div>
+      <div className="setup-status-item wide"><span>Tracking</span><strong>{selectedSatName || "--"}</strong></div>
+      <div className="setup-status-item wide"><span>GS</span><strong>{selectedStationName || "--"}</strong></div>
+      {updated ? <div className="setup-status-item"><span>Last Fetch</span><strong>{updated.toLocaleTimeString()}</strong></div> : null}
+    </div>
+  );
+}
+
 function SettingsDialog({ open, onClose, children }) {
   if (!open) return null;
   return (
@@ -1849,8 +1890,8 @@ function SettingsDialog({ open, onClose, children }) {
       <section className="settings-modal-window" role="dialog" aria-modal="true" aria-label="Mission setup and YAML settings">
         <div className="settings-modal-header">
           <div>
-            <h2>YAML Setup</h2>
-            <p className="muted small">VSCode風に、上から Quick TLE Add / YAML Editor / Advanced Settings の順に配置しています。設定の正本はYAMLです。</p>
+            <h2>YAML Setup / TLE Fetch</h2>
+            <p className="muted small">VSCode風に、Quick Add / YAML Editor / Advanced Settings を分離しています。通常はYAML一括設定 → 必要ならTLE Fetch の順で操作します。</p>
           </div>
           <button className="button compact" onClick={onClose}>Close</button>
         </div>
@@ -1867,6 +1908,11 @@ function MissionSetupPanel({
   onAddAndFetchQuickTle,
   onFetchTleSources,
   tleSourceCount,
+  satelliteCount,
+  stationCount,
+  selectedSatName,
+  selectedStationName,
+  tleFetchStatus,
   exporting,
   onImportConfigFile,
   onDownloadTemplate,
@@ -1886,15 +1932,31 @@ function MissionSetupPanel({
   onImportRadarBackgroundFile,
   orbitTrackColorMode,
   onOrbitTrackColorModeChange,
+  missionStatusItems = [],
 }) {
+  const fetchRequired = tleSourceCount > 0 && missionStatusItems.some((item) => item.label === "TLE" && item.state === "warn");
   return (
     <section className="setup-workbench">
+      <MissionStatusBar items={missionStatusItems} />
+      {fetchRequired ? (
+        <div className="setup-fetch-callout">
+          <strong>TLE URL sources detected.</strong> YAML内の <code>tle_sources</code> はURLリストです。設定を反映したあと、<b>Fetch URL TLEs</b> を押して衛星TLEを取得してください。
+        </div>
+      ) : null}
+      <SetupStatusBar
+        tleSourceCount={tleSourceCount}
+        satelliteCount={satelliteCount}
+        stationCount={stationCount}
+        selectedSatName={selectedSatName}
+        selectedStationName={selectedStationName}
+        tleFetchStatus={tleFetchStatus}
+      />
       <section className="setup-row setup-quick-row">
         <div className="setup-section-head">
           <div>
-            <div className="setup-section-kicker">Quick satellite add</div>
-            <h3>Paste TLE URL list or 3-line TLE</h3>
-            <p className="muted small">通常はYAML一括設定を使います。ここは運用中に衛星を追加で試すための補助欄です。</p>
+            <div className="setup-section-kicker">Quick Add / temporary satellite import</div>
+            <h3>Paste name@URL list or 3-line TLE</h3>
+            <p className="muted small">通常はYAML一括設定を使います。ここは、運用中に一時的にTLE URLや3行TLEを追加したい場合の補助欄です。</p>
           </div>
           <div className="mission-status-chip">TLE sources: <strong>{tleSourceCount}</strong></div>
         </div>
@@ -1907,8 +1969,8 @@ function MissionSetupPanel({
             placeholder={'ISS (ZARYA)@https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=TLE\n\nまたは\nSAT NAME\n1 .....\n2 .....'}
           />
           <div className="setup-quick-actions">
-            <button className="button primary" onClick={onAddAndFetchQuickTle} disabled={exporting}>Add & Fetch</button>
-            <button className="button" onClick={onAddQuickTle}>Add to YAML</button>
+            <button className="button primary" onClick={onAddAndFetchQuickTle} disabled={exporting}>Fetch Now & Add</button>
+            <button className="button" onClick={onAddQuickTle}>Insert into YAML only</button>
           </div>
         </div>
       </section>
@@ -1916,19 +1978,24 @@ function MissionSetupPanel({
       <section className="setup-row setup-editor-row">
         <div className="setup-section-head editor-head">
           <div>
-            <div className="setup-section-kicker">YAML editor</div>
+            <div className="setup-section-kicker">YAML editor / operation source of truth</div>
             <h3>Mission configuration</h3>
-            <p className="muted small">運用設定の正本です。YAML読み込み、直接編集、URL TLEのFetchをここで行います。</p>
+            <p className="muted small">運用設定の正本です。tle_sources を含むYAMLを適用した後は、右側の Fetch URL TLEs を実行してください。</p>
           </div>
           <div className="setup-toolbar">
             <label className="button file-button primary">
-              Import YAML
+              Import YAML(s)
               <input type="file" multiple accept=".yaml,.yml,.json,application/x-yaml,application/json" onChange={onImportConfigFile} />
             </label>
             <button className="button primary" onClick={onApplyConfigText}>Apply YAML</button>
-            <button className="button" onClick={onFetchTleSources} disabled={exporting || !tleSourceCount}>Fetch YAML URLs</button>
-            <button className="button" onClick={onSyncEditorFromCurrent}>Sync Current</button>
+            <button className="button fetch-button" onClick={onFetchTleSources} disabled={exporting || !tleSourceCount}>Fetch URL TLEs</button>
+            <button className="button" onClick={onSyncEditorFromCurrent}>Sync from Current State</button>
           </div>
+        </div>
+        <div className={tleSourceCount ? "fetch-guidance active" : "fetch-guidance"}>
+          {tleSourceCount
+            ? `TLE URL sources detected: ${tleSourceCount}. Apply YAML の後、Fetch URL TLEs で衛星リストを更新します。`
+            : "TLE本文を satellites[].tle に書く場合は、YAML適用だけで衛星が登録されます。URL型は tle_sources を使います。"}
         </div>
         <textarea
           className="setup-yaml-editor mono"
@@ -1977,11 +2044,11 @@ function MissionSetupPanel({
           <div className="setup-section-kicker">Other tools</div>
           <h3>Templates / Export / Privacy</h3>
           <div className="setup-button-grid tools-grid">
-            <button className="button" onClick={onExportYaml}>Export YAML</button>
-            <button className="button" onClick={onDownloadTemplate}>Template</button>
-            <button className="button" onClick={onDownloadTleSourceTemplate}>TLE URL YAML</button>
+            <button className="button" onClick={onExportYaml}>Export Current YAML</button>
+            <button className="button" onClick={onDownloadTemplate}>Download Template</button>
+            <button className="button" onClick={onDownloadTleSourceTemplate}>Download URL Template</button>
             <button className="button github-button" onClick={onOpenGitHubRepository}>GitHub</button>
-            <button className="button danger" onClick={onClearLocalConfig}>Clear Local</button>
+            <button className="button danger" onClick={onClearLocalConfig}>Clear Browser Config</button>
           </div>
           <div className="app-tools-box compact-privacy-box">
             <div className="muted tiny">Privacy / data flow</div>
@@ -2020,6 +2087,14 @@ function App() {
   const now = useMemo(() => new Date(clockNow.getTime() + safeNumber(timeOffsetMinutes, 0) * 60000), [clockNow, timeOffsetMinutes]);
   const [configText, setConfigText] = useState(() => buildTemplateYaml());
   const [configMessage, setConfigMessage] = useState("YAMLでTLE・地上局・周波数・地図設定を一括管理します。");
+  const [tleFetchStatus, setTleFetchStatus] = useState(() => ({
+    state: initialConfig.tleSources?.length ? "not_fetched" : "not_required",
+    sourceCount: initialConfig.tleSources?.length || 0,
+    success: 0,
+    failed: 0,
+    timestamp: null,
+    message: initialConfig.tleSources?.length ? "TLE URL sources are configured. Fetch is required." : "No URL fetch required.",
+  }));
   const [quickTleText, setQuickTleText] = useState("");
   const [exporting, setExporting] = useState(false);
   const [viewMode, setViewMode] = useState("split");
@@ -2125,6 +2200,46 @@ function App() {
     operationTimerEntry ? `OPS #${operationTimerEntry.index + 1}/${operationPassEntries.length}` : null
   );
 
+  const tleFetchNeedsAction = tleSources.length > 0 && tleFetchStatus.state !== "fetched";
+  const missionStatusItems = [
+    {
+      label: "YAML",
+      value: configText.trim() ? "loaded" : "empty",
+      state: configText.trim() ? "ok" : "warn",
+      hint: configText.trim() ? "editor ready" : "import or write YAML",
+    },
+    {
+      label: "TLE",
+      value: tleSources.length
+        ? (tleFetchNeedsAction ? "fetch required" : `fetched ${tleFetchStatus.success || satellites.length}/${tleSources.length}`)
+        : `${satellites.length} direct`,
+      state: tleSources.length ? (tleFetchNeedsAction ? "warn" : "ok") : (satellites.length ? "ok" : "warn"),
+      hint: tleSources.length ? "URL sources" : "satellites[].tle",
+    },
+    {
+      label: "TRACK",
+      value: selectedSat?.name || "not selected",
+      state: selectedSat ? "ok" : "warn",
+    },
+    {
+      label: "DISPLAY",
+      value: `${displayedSatellites.length}/${satellites.length}`,
+      state: displayedSatellites.length ? "ok" : "warn",
+      hint: "visible on map/radar",
+    },
+    {
+      label: "OPS",
+      value: `${selectedOperationPassKeys.length} reserved`,
+      state: selectedOperationPassKeys.length ? "ok" : "neutral",
+    },
+    {
+      label: "CSV",
+      value: selectedSat && selectedStation ? "ready" : "not ready",
+      state: selectedSat && selectedStation ? "ok" : "warn",
+      hint: csvDate,
+    },
+  ];
+
   function applyNormalizedConfig(config) {
     setAppConfig(config.app);
     setOpsConfig(config.ops);
@@ -2140,9 +2255,18 @@ function App() {
     setCsvDate(formatYmdInZone(new Date(), config.ops.timezone || "Asia/Tokyo"));
     const text = dumpYaml(exportableConfig(config.app, config.ops, config.map, config.radar, config.orbitTrack, config.tleSources || [], config.satellites[0], config.groundStations[0], config.satellites, config.groundStations));
     setConfigText(text);
-    setConfigMessage(config.tleSources?.length
-      ? "設定を適用しました。TLE URLを使う場合は、次に Fetch / Update TLE を押してください。"
-      : "設定を適用しました。");
+    const sourceCount = config.tleSources?.length || 0;
+    setTleFetchStatus({
+      state: sourceCount ? "not_fetched" : "not_required",
+      sourceCount,
+      success: 0,
+      failed: 0,
+      timestamp: null,
+      message: sourceCount ? "YAML contains TLE URL sources. Fetch is required." : "No URL fetch required.",
+    });
+    setConfigMessage(sourceCount
+      ? `設定を適用しました。TLE URL sources=${sourceCount}。次に Fetch URL TLEs を押してください。`
+      : "設定を適用しました。TLE本文またはデフォルトTLEを使用します。");
   }
 
   function applyConfigText() {
@@ -2164,7 +2288,7 @@ function App() {
     );
     if (!ok) return;
     CONFIG_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
-    setConfigMessage("ブラウザ内の保存設定を削除しました。現在の画面状態を残したい場合は Export YAML で保存してください。");
+    setConfigMessage("ブラウザ内の保存設定を削除しました。現在の画面状態を残したい場合は Export Current YAML で保存してください。");
   }
 
   function openGitHubRepository() {
@@ -2176,7 +2300,7 @@ function App() {
   }
 
   function downloadTleSourceTemplate() {
-    downloadText("tle_sources_example.yaml", `# TLE URL source example\n# name@url 形式で1行1件を指定します。取得は Fetch YAML URLs / Add & Fetch で実行します。\ntle_sources: |\n${DEFAULT_TLE_SOURCES_TEXT.split("\n").filter((line) => line.trim() && !line.trim().startsWith("#")).map((line) => `  ${line}`).join("\n")}\n`, "application/x-yaml");
+    downloadText("tle_sources_example.yaml", `# TLE URL source example\n# name@url 形式で1行1件を指定します。取得は Fetch URL TLEs / Fetch Now & Add で実行します。\ntle_sources: |\n${DEFAULT_TLE_SOURCES_TEXT.split("\n").filter((line) => line.trim() && !line.trim().startsWith("#")).map((line) => `  ${line}`).join("\n")}\n`, "application/x-yaml");
   }
 
   function loadDefaultTleSources() {
@@ -2205,7 +2329,7 @@ function App() {
       const fragments = await Promise.all(files.map(async (file) => parseConfigText(await file.text(), file.name)));
       const merged = fragments.length === 1 ? fragments[0] : mergeConfigFragments(fragments);
       applyNormalizedConfig(normalizeConfig(merged));
-      setConfigMessage(files.length === 1 ? `設定ファイルを読み込みました: ${files[0].name}` : `${files.length} 個の分割YAML/JSONを読み込みました。`);
+      setConfigMessage(files.length === 1 ? `設定ファイルを読み込みました: ${files[0].name}。tle_sources がある場合は Fetch URL TLEs を実行してください。` : `${files.length} 個の分割YAML/JSONを読み込みました。tle_sources がある場合は Fetch URL TLEs を実行してください。`);
     } catch (error) {
       setConfigMessage(`設定ファイルの読み込みに失敗しました: ${error.message}`);
     } finally {
@@ -2362,6 +2486,16 @@ function App() {
       const sourceMessage = patch.sources.length ? `TLE source=${patch.sources.length}` : "";
       const satMessage = patch.satellites.length ? `TLE sat=${patch.satellites.length}` : "";
       setConfigMessage(`Quick Satellite Add をYAMLへ反映しました。${[sourceMessage, satMessage].filter(Boolean).join(", ") || "no item"}`);
+      if (patch.sources.length) {
+        setTleFetchStatus({
+          state: "not_fetched",
+          sourceCount: nextSources.length,
+          success: 0,
+          failed: 0,
+          timestamp: null,
+          message: "Quick Add inserted URL sources. Fetch is required unless Fetch now was selected.",
+        });
+      }
 
       if (fetchAfter) {
         if (!patch.sources.length) {
@@ -2382,6 +2516,7 @@ function App() {
       return;
     }
     setExporting(true);
+    setTleFetchStatus({ state: "fetching", sourceCount: targetSources.length, success: 0, failed: 0, timestamp: null, message: `${label} fetching...` });
     setConfigMessage(`${label} から取得中です。source_count=${targetSources.length}`);
     try {
       const results = await Promise.allSettled(targetSources.map((source, index) => fetchSatelliteFromTleSource(source, index)));
@@ -2392,8 +2527,17 @@ function App() {
       setSatellites((prev) => mergeSatellites(prev, fetched));
       setVisibleSatIds((prevIds) => Array.from(new Set([...prevIds, ...fetched.map((item) => item.id)])));
       setSelectedSatId(fetched[0]?.id ?? selectedSatId);
+      setTleFetchStatus({
+        state: "fetched",
+        sourceCount: targetSources.length,
+        success: fetched.length,
+        failed: failed.length,
+        timestamp: new Date().toISOString(),
+        message: failed.length ? failed.join(" / ") : "Fetch completed.",
+      });
       setConfigMessage(`TLE取得完了: success=${fetched.length}, failed=${failed.length}${failed.length ? ` / ${failed.join(" / ")}` : ""}`);
     } catch (error) {
+      setTleFetchStatus({ state: "failed", sourceCount: targetSources.length, success: 0, failed: targetSources.length, timestamp: new Date().toISOString(), message: error.message });
       setConfigMessage(`TLE取得に失敗しました: ${error.message}`);
     } finally {
       setExporting(false);
@@ -2470,34 +2614,12 @@ function App() {
         <div className="top-actions runtime-actions">
           <button className="button primary" onClick={() => setRunning((v) => !v)}>{running ? "Pause" : "Run"}</button>
           <button className="button" onClick={() => setClockNow(new Date())}>Now</button>
-          <button className="button setup-button" onClick={() => setSettingsOpen(true)}>YAML Setup</button>
+          <button className="button setup-button" onClick={() => setSettingsOpen(true)}>YAML Setup / TLE Fetch</button>
           <button className="button github-button" onClick={openGitHubRepository}>GitHub</button>
           <label className="offset-control">Offset min<input type="number" step="1" value={timeOffsetMinutes} onChange={(e) => setTimeOffsetMinutes(e.target.value)} /></label>
           <button className="button" onClick={() => setTimeOffsetMinutes(0)}>Offset 0</button>
         </div>
       </header>
-
-      <DopplerOutputPanel
-        csvDate={csvDate}
-        onCsvDateChange={setCsvDate}
-        onExportZip={exportPassCsvZip}
-        exporting={exporting}
-        selectedSat={selectedSat}
-        selectedStation={selectedStation}
-      />
-
-      <OperationTargetPanel
-        selectedSat={selectedSat}
-        satellites={satellites}
-        onSelectedSatChange={setSelectedSatId}
-        selectedStation={selectedStation}
-        stations={stations}
-        onSelectedStationChange={setSelectedStationId}
-        visibleSatIds={visibleSatIds}
-        onToggleVisibleSatellite={toggleVisibleSatellite}
-        onSetAllVisible={setAllSatellitesVisible}
-        onOpenSetup={() => setSettingsOpen(true)}
-      />
 
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)}>
         <MissionSetupPanel
@@ -2507,6 +2629,11 @@ function App() {
           onAddAndFetchQuickTle={() => applyQuickTleInput({ fetchAfter: true })}
           onFetchTleSources={fetchTleSources}
           tleSourceCount={tleSources.length}
+          satelliteCount={satellites.length}
+          stationCount={stations.length}
+          selectedSatName={selectedSat?.name}
+          selectedStationName={selectedStation?.name}
+          tleFetchStatus={tleFetchStatus}
           exporting={exporting}
           onImportConfigFile={importConfigFile}
           onDownloadTemplate={downloadTemplate}
@@ -2526,6 +2653,7 @@ function App() {
           onImportRadarBackgroundFile={importRadarBackgroundFile}
           orbitTrackColorMode={orbitTrackConfig.colorMode}
           onOrbitTrackColorModeChange={(value) => setOrbitTrackConfig((prev) => ({ ...prev, colorMode: value }))}
+          missionStatusItems={missionStatusItems}
         />
 
       </SettingsDialog>
@@ -2595,8 +2723,22 @@ function App() {
         ) : null}
       </section>
 
-      <PassTable
-        passes={passes}
+      <OperationTargetPanel
+        selectedSat={selectedSat}
+        satellites={satellites}
+        onSelectedSatChange={setSelectedSatId}
+        selectedStation={selectedStation}
+        stations={stations}
+        onSelectedStationChange={setSelectedStationId}
+        visibleSatIds={visibleSatIds}
+        onToggleVisibleSatellite={toggleVisibleSatellite}
+        onSetAllVisible={setAllSatellitesVisible}
+        onOpenSetup={() => setSettingsOpen(true)}
+      />
+
+      <section className="ops-data-row">
+        <PassTable
+          passes={passes}
         horizonHours={effectivePredictionHorizonHours}
         passWindowMode={passWindowMode}
         onPassWindowModeChange={setPassWindowMode}
@@ -2607,8 +2749,17 @@ function App() {
         selectedOperationPassKeys={selectedOperationPassKeys}
         onSelectPass={toggleSelectedRadarPass}
         onSelectOperationPass={toggleOperationPass}
-        onCopyPassText={copyPassTableText}
-      />
+          onCopyPassText={copyPassTableText}
+        />
+        <DopplerOutputPanel
+          csvDate={csvDate}
+          onCsvDateChange={setCsvDate}
+          onExportZip={exportPassCsvZip}
+          exporting={exporting}
+          selectedSat={selectedSat}
+          selectedStation={selectedStation}
+        />
+      </section>
 
       <section className="panel detail-panel">
         <div className="panel-title-row">

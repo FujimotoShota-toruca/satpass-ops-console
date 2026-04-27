@@ -1,6 +1,6 @@
 {
   "name": "satpass-ops-console",
-  "version": "0.25.0",
+  "version": "0.26.2",
   "private": false,
   "type": "module",
   "scripts": {
