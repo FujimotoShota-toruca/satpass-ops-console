@@ -237,3 +237,14 @@ The following controls are currently UI runtime state rather than YAML-persisted
 - `Pass prediction window`: `Today`, `12h`, `24h`, `48h`, `72h`.
 - `Time offset min`: signed minute offset applied to the displayed/propagated current time.
 - Radar pass row selection: multiple rows can be selected/unselected from `Next Visible Passes`.
+
+
+## Command AOS/LOS elevation
+
+任意の仰角をコマンド運用開始/終了の基準として使う場合は、`command_elevation_deg` を指定します。通常の可視判定は地上局ごとの `min_elevation_deg`、コマンドタイマーは `command_elevation_deg` を使います。
+
+```yaml
+settings:
+  min_elevation_deg: 0.0
+  command_elevation_deg: 5.0
+```

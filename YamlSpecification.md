@@ -12,6 +12,8 @@
 settings:
   timezone: Asia/Tokyo
   min_elevation_deg: 0.0
+  # コマンドAOS/LOSに使う仰角 [deg]
+  command_elevation_deg: 5.0
 
 doppler:
   uplink_base_frequency_hz: 145000000
@@ -61,6 +63,7 @@ satellites:
 settings:
   timezone: Asia/Tokyo
   min_elevation_deg: 0.0
+  command_elevation_deg: 5.0
   observation_date: 2026-04-25
   input_root: ./
   output_root: ../output
@@ -71,6 +74,7 @@ settings:
 |---|---:|---|
 | `timezone` | - | 表示・日付計算に使うタイムゾーン |
 | `min_elevation_deg` | deg | AOS/LOS判定に使う最低仰角 |
+| `command_elevation_deg` | deg | コマンドAOS/LOS判定に使う任意仰角 |
 | `observation_date` | YYYY-MM-DD | 互換用。画面上ではカレンダー選択が優先 |
 | `input_root` | path | 互換用 |
 | `output_root` | path | 互換用 |
@@ -115,6 +119,50 @@ ground_stations:
 | `longitude_deg` | deg | 測地経度 |
 | `altitude_m` | m | 楕円体高または運用上の地上局高度 |
 | `min_elevation_deg` | deg | この地上局の最低仰角 |
+
+緯度・経度は10進数degのほか、度/分/秒方式でも指定できます。以下はいずれも同じ意味です。
+
+```yaml
+ground_stations:
+  - id: utsunomiya
+    name: Utsunomiya GS
+    latitude_deg: 36.604900972404
+    longitude_deg: 139.88146470024
+    altitude_m: 172.0032
+    min_elevation_deg: 0.0
+```
+
+```yaml
+ground_stations:
+  - id: utsunomiya
+    name: Utsunomiya GS
+    latitude_dms: "36°36'17.6435\"N"
+    longitude_dms: "139°52'53.273\"E"
+    altitude_m: 172.0032
+    min_elevation_deg: 0.0
+```
+
+オブジェクト形式も使えます。
+
+```yaml
+ground_stations:
+  - id: utsunomiya
+    name: Utsunomiya GS
+    latitude:
+      deg: 36
+      min: 36
+      sec: 17.6435
+      hemisphere: N
+    longitude:
+      deg: 139
+      min: 52
+      sec: 53.273
+      hemisphere: E
+    altitude_m: 172.0032
+    min_elevation_deg: 0.0
+```
+
+南緯・西経は `S` / `W` を使うか、度を負値にしてください。
 
 ---
 
@@ -255,3 +303,14 @@ tle_sources: |
 ```
 
 この方式では、YAML読み込み後に `Fetch YAML URLs` が必要です。
+
+
+## Command AOS/LOS elevation
+
+任意の仰角をコマンド運用開始/終了の基準として使う場合は、`command_elevation_deg` を指定します。通常の可視判定は地上局ごとの `min_elevation_deg`、コマンドタイマーは `command_elevation_deg` を使います。
+
+```yaml
+settings:
+  min_elevation_deg: 0.0
+  command_elevation_deg: 5.0
+```

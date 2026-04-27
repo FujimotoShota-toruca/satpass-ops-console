@@ -54,6 +54,8 @@ npm run build
 settings:
   timezone: Asia/Tokyo
   min_elevation_deg: 0.0
+  # コマンドAOS/LOSに使う仰角 [deg]
+  command_elevation_deg: 5.0
 
 # Doppler設定。単位は Hz。
 # 145 MHz / 430 MHz の場合は 145000000 / 430000000 と書く。
@@ -82,6 +84,42 @@ satellites:
 ```
 
 注意：`uplink_base_frequency_hz` / `downlink_base_frequency_hz` は **Hz指定**です。`145.000` と書くと 145 MHz ではなく 145 Hz として扱われます。
+
+### 地上局座標を度/分/秒で書く場合
+
+10進数degの代わりに、度/分/秒方式も使えます。例えば以下のように書きます。
+
+```yaml
+ground_stations:
+  - id: utsunomiya
+    name: Utsunomiya GS
+    latitude_dms: "36°36'17.6435\"N"
+    longitude_dms: "139°52'53.273\"E"
+    altitude_m: 172.0032
+    min_elevation_deg: 0.0
+```
+
+オブジェクト形式でも指定できます。
+
+```yaml
+ground_stations:
+  - id: utsunomiya
+    name: Utsunomiya GS
+    latitude:
+      deg: 36
+      min: 36
+      sec: 17.6435
+      hemisphere: N
+    longitude:
+      deg: 139
+      min: 52
+      sec: 53.273
+      hemisphere: E
+    altitude_m: 172.0032
+    min_elevation_deg: 0.0
+```
+
+南緯・西経の場合は `S` / `W` を使ってください。
 
 ---
 

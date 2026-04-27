@@ -1050,7 +1050,7 @@ td {
 /* ---- v9 layout refinements --------------------------------------------- */
 .ops-dashboard {
   display: grid;
-  grid-template-columns: minmax(220px, 1.25fr) repeat(5, minmax(135px, 1fr));
+  grid-template-columns: minmax(220px, 1.25fr) repeat(6, minmax(130px, 1fr));
   gap: 9px;
   align-items: stretch;
   margin-bottom: 8px;
@@ -2600,4 +2600,60 @@ td {
 
 .skyline-csv-status {
   align-self: center;
+}
+
+/* ---- v28 precise pass timing and command AOS/LOS display --------------- */
+.split-timer-card {
+  min-height: 116px;
+}
+
+.seven-secondary {
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.seven-secondary-label {
+  font-size: 9px;
+  color: #fbbf24;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  font-weight: 850;
+}
+
+.seven-secondary-value {
+  margin-top: 2px;
+  font-family: "Share Tech Mono", "Courier New", ui-monospace, monospace;
+  font-size: clamp(16px, 1.45vw, 25px);
+  line-height: 1;
+  letter-spacing: 0.055em;
+  color: #facc15;
+  text-shadow: 0 0 7px rgba(250, 204, 21, 0.7), 0 0 18px rgba(245, 158, 11, 0.25);
+}
+
+.seven-secondary.visible .seven-secondary-value {
+  color: #86efac;
+  text-shadow: 0 0 8px rgba(134, 239, 172, 0.75), 0 0 20px rgba(34, 197, 94, 0.25);
+}
+
+.seven-secondary-sub {
+  margin-top: 2px;
+  font-size: 9px;
+  color: #fde68a;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+
+/* ---- v29 separate command timer card ------------------------------------ */
+.seven-card.command .seven-value {
+  color: #facc15;
+  text-shadow: 0 0 7px rgba(250, 204, 21, 0.7), 0 0 18px rgba(245, 158, 11, 0.25);
+}
+
+.seven-card.command {
+  border-color: rgba(250, 204, 21, 0.32);
+  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.34), inset 0 0 22px rgba(250, 204, 21, 0.08);
 }

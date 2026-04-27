@@ -5,6 +5,8 @@
 settings:
   timezone: Asia/Tokyo
   min_elevation_deg: 0.0
+  # コマンドAOS/LOSに使う仰角 [deg]
+  command_elevation_deg: 5.0
 
 doppler:
   uplink_base_frequency_hz: 145000000

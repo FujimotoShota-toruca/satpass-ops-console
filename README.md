@@ -460,3 +460,18 @@ orbit_track:
 - Ops予約を現在表示中のパス一覧だけに依存しないスナップショット管理に変更しました。Visible Passesの表示範囲外になった予約パスも、同じ追尾衛星・地上局ではPASS TIMERの対象として保持されます。
 - Radar Chartに方位角/仰角CSVによるスカイライン表示を追加しました。`Upload skyline CSV` から、`azimuth_deg,elevation_deg` または先頭2列が方位角[deg]・仰角[deg]のCSVを読み込めます。
 - 画像ベースのスカイライン背景とCSVベースのスカイライン線を併用できます。
+
+
+## v0.28.0
+
+- Visible Passes の Ops 予約を 1Day 以外の予測範囲でも保持しやすい安定キー/スナップショット照合に変更。
+- AOS/LOS と MaxEL 時刻を 30秒グリッド依存ではなく、仰角しきい値の交差時刻を二分探索で求める方式に変更。
+- `command_elevation_deg` を追加し、従来AOS/LOSとは別に Command AOS/LOS のカウントダウンを PASS TIMER 内に表示。
+
+
+### v0.29.0
+
+- 通常AOS/LOSタイマーとCommand AOS/LOSタイマーを別カード表示に変更。
+- `Visible Passes` のデフォルト予測範囲を `24h` に変更。
+- 最小YAML構成に `command_elevation_deg` を含める方針を明記。
+- 地上局緯度・経度で10進数degに加え、度/分/秒（DMS）形式に対応。

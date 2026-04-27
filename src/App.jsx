@@ -161,6 +161,10 @@ function normalizeOps(raw = {}) {
     uplinkBaseFrequencyHz: safeNumber(raw.uplink_base_frequency_hz ?? raw.uplinkBaseFrequencyHz, 2036250000),
     downlinkBaseFrequencyHz: safeNumber(raw.downlink_base_frequency_hz ?? raw.downlinkBaseFrequencyHz, 2201000000),
     minElevationDeg: safeNumber(raw.min_elevation_deg ?? raw.minElevationDeg, 0),
+    commandElevationDeg: safeNumber(
+      raw.command_elevation_deg ?? raw.commandElevationDeg ?? raw.command_aos_los_elevation_deg ?? raw.commandAosLosElevationDeg,
+      safeNumber(raw.min_elevation_deg ?? raw.minElevationDeg, 0)
+    ),
   };
 }
 
@@ -219,12 +223,85 @@ function normalizeSatellite(raw, index = 0) {
   };
 }
 
+function parseAngleDeg(value, fallback = 0, axis = "lat") {
+  if (Number.isFinite(Number(value)) && value !== null && value !== "") return Number(value);
+
+  const hemisphereSign = (hemisphere) => {
+    const h = safeString(hemisphere).trim().toUpperCase();
+    if (h === "S" || h === "W") return -1;
+    if (h === "N" || h === "E") return 1;
+    return null;
+  };
+
+  if (Array.isArray(value)) {
+    const [deg, min = 0, sec = 0, hemi = ""] = value;
+    const d = Number(deg);
+    const m = Number(min);
+    const ss = Number(sec);
+    if (!Number.isFinite(d)) return fallback;
+    const inferred = hemisphereSign(hemi);
+    const sign = inferred ?? (d < 0 ? -1 : 1);
+    return sign * (Math.abs(d) + (Number.isFinite(m) ? Math.abs(m) / 60 : 0) + (Number.isFinite(ss) ? Math.abs(ss) / 3600 : 0));
+  }
+
+  if (value && typeof value === "object") {
+    const deg = value.deg ?? value.degrees ?? value.d;
+    const min = value.min ?? value.minute ?? value.minutes ?? value.m ?? 0;
+    const sec = value.sec ?? value.second ?? value.seconds ?? value.s ?? 0;
+    const hemi = value.hemisphere ?? value.hemi ?? value.direction ?? value.dir ?? "";
+    const d = Number(deg);
+    const mm = Number(min);
+    const ss = Number(sec);
+    if (!Number.isFinite(d)) return fallback;
+    const inferred = hemisphereSign(hemi);
+    const sign = inferred ?? (d < 0 ? -1 : 1);
+    return sign * (Math.abs(d) + (Number.isFinite(mm) ? Math.abs(mm) / 60 : 0) + (Number.isFinite(ss) ? Math.abs(ss) / 3600 : 0));
+  }
+
+  const text = safeString(value).trim();
+  if (!text) return fallback;
+  const numeric = Number(text);
+  if (Number.isFinite(numeric)) return numeric;
+
+  const upper = text.toUpperCase();
+  const trimmedUpper = upper.trim();
+  let hemi = "";
+  if (/[北]/.test(trimmedUpper)) hemi = "N";
+  else if (/[南]/.test(trimmedUpper)) hemi = "S";
+  else if (/[東]/.test(trimmedUpper)) hemi = "E";
+  else if (/[西]/.test(trimmedUpper)) hemi = "W";
+  else if (/^[NSEW]\b/.test(trimmedUpper)) hemi = trimmedUpper[0];
+  else if (/\b[NSEW]$/.test(trimmedUpper)) hemi = trimmedUpper[trimmedUpper.length - 1];
+
+  const normalized = upper
+    .replace(/[NSEW東西南北]/g, " ")
+    .replace(/[°º˚度D]/g, " ")
+    .replace(/[′’'分M]/g, " ")
+    .replace(/[″”"秒S]/g, " ")
+    .replace(/[:，、,]/g, " ");
+  const nums = normalized.match(/[+-]?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
+  if (!nums.length || !Number.isFinite(nums[0])) return fallback;
+
+  const d = nums[0];
+  const m = Number.isFinite(nums[1]) ? Math.abs(nums[1]) : 0;
+  const sec = Number.isFinite(nums[2]) ? Math.abs(nums[2]) : 0;
+  const inferred = hemisphereSign(hemi);
+  const sign = inferred ?? (d < 0 ? -1 : 1);
+  const result = sign * (Math.abs(d) + m / 60 + sec / 3600);
+
+  if (axis === "lat") return clamp(result, -90, 90);
+  if (axis === "lon") return normalizeLon(result);
+  return result;
+}
+
 function normalizeStation(raw = {}, index = 0, fallbackMinElevationDeg = 0) {
+  const latRaw = raw.latDeg ?? raw.latitudeDeg ?? raw.latitude_deg ?? raw.lat ?? raw.latitude ?? raw.latitude_dms ?? raw.latitudeDms;
+  const lonRaw = raw.lonDeg ?? raw.longitudeDeg ?? raw.longitude_deg ?? raw.lon ?? raw.longitude ?? raw.longitude_dms ?? raw.longitudeDms;
   return {
     id: safeString(raw.id, `gs-${index + 1}`),
     name: safeString(raw.name, `Ground Station ${index + 1}`),
-    latDeg: safeNumber(raw.latDeg ?? raw.latitudeDeg ?? raw.latitude_deg ?? raw.lat, 0),
-    lonDeg: safeNumber(raw.lonDeg ?? raw.longitudeDeg ?? raw.longitude_deg ?? raw.lon, 0),
+    latDeg: parseAngleDeg(latRaw, 0, "lat"),
+    lonDeg: parseAngleDeg(lonRaw, 0, "lon"),
     heightM: safeNumber(raw.heightM ?? raw.altitudeM ?? raw.altitude_m ?? raw.height ?? 0, 0),
     minElevationDeg: safeNumber(raw.minElevationDeg ?? raw.min_elevation_deg ?? raw.minElDeg ?? raw.maskDeg ?? fallbackMinElevationDeg, fallbackMinElevationDeg),
   };
@@ -409,6 +486,7 @@ function exportableConfig(appConfig, opsConfig, mapConfig, radarConfig, orbitTra
     uplink_base_frequency_hz: opsConfig.uplinkBaseFrequencyHz,
     downlink_base_frequency_hz: opsConfig.downlinkBaseFrequencyHz,
     min_elevation_deg: station?.minElevationDeg ?? opsConfig.minElevationDeg,
+    command_elevation_deg: opsConfig.commandElevationDeg,
     ground_station: {
       name: station?.name || "Ground Station",
       latitude_deg: station?.latDeg ?? 0,
@@ -474,7 +552,7 @@ function dumpYaml(config) {
 }
 
 function buildTemplateYaml() {
-  return `# SatPass Ops Console 設定例 v24
+  return `# SatPass Ops Console 設定例 v29
 # 1ファイル運用も、分割YAML運用も可能です。
 # 分割する場合は、ground_stations.yaml / satellites.yaml / doppler.yaml / settings.yaml / map.yaml / radar.yaml / orbit_track.yaml を
 # Import YAML(s)/JSON で複数選択してください。
@@ -486,6 +564,8 @@ settings:
   folder_name: test_ops
   timezone: Asia/Tokyo
   min_elevation_deg: 0.0
+  # コマンド送信など、運用開始/終了に使う任意仰角 [deg]
+  command_elevation_deg: 5.0
 
 # ドップラー設定 [Hz]
 doppler:
@@ -704,9 +784,8 @@ function formatHmInZone(date, timeZone) {
   return `${pad2(p.hour)}:${pad2(p.minute)}`;
 }
 
-function buildPassCopyText(passes, timeZone, operationPassKeys = []) {
+function buildPassCopyText(passes, timeZone, operationPassKeys = [], operationPassRegistry = {}) {
   if (!passes.length) return "No visible pass in the selected prediction window.";
-  const operationSet = new Set(operationPassKeys);
   const byDate = new Map();
   for (const pass of passes) {
     const key = formatMonthDayInZone(pass.aos, timeZone);
@@ -721,7 +800,7 @@ function buildPassCopyText(passes, timeZone, operationPassKeys = []) {
   for (const [dateLabel, datePasses] of byDate.entries()) {
     lines.push(dateLabel);
     datePasses.forEach((pass, index) => {
-      const opsLabel = operationSet.has(passStableKey(pass)) ? "運用" : "非運用";
+      const opsLabel = findOperationKeyForPass(pass, operationPassKeys, operationPassRegistry) ? "運用" : "非運用";
       lines.push(`Pass[${pad2(index + 1)}] ${formatHmInZone(pass.aos, timeZone)} to ${formatHmInZone(pass.los, timeZone)} @ MEL=${pass.maxElDeg.toFixed(1)}[deg.] [${opsLabel}]`);
     });
     lines.push("");
@@ -765,6 +844,7 @@ function buildPassTimer(passes, now, timeZone, selectedPass = null, selectedLabe
         sub: `${prefix}to AOS ${formatIsoInZone(selectedPass.aos, timeZone)}`,
         inPass: false,
         selected: true,
+        targetPass: selectedPass,
       };
     }
     if (now <= selectedPass.los) {
@@ -774,6 +854,7 @@ function buildPassTimer(passes, now, timeZone, selectedPass = null, selectedLabe
         sub: `${prefix}to LOS ${formatIsoInZone(selectedPass.los, timeZone)}`,
         inPass: true,
         selected: true,
+        targetPass: selectedPass,
       };
     }
     return {
@@ -782,6 +863,7 @@ function buildPassTimer(passes, now, timeZone, selectedPass = null, selectedLabe
       sub: `${prefix}ended ${formatIsoInZone(selectedPass.los, timeZone)}`,
       inPass: false,
       selected: true,
+      targetPass: selectedPass,
     };
   }
 
@@ -793,6 +875,7 @@ function buildPassTimer(passes, now, timeZone, selectedPass = null, selectedLabe
       sub: `auto / to LOS ${formatIsoInZone(active.los, timeZone)}`,
       inPass: true,
       selected: false,
+      targetPass: active,
     };
   }
   const next = passes.find((pass) => pass.aos > now) || passes[0];
@@ -803,9 +886,47 @@ function buildPassTimer(passes, now, timeZone, selectedPass = null, selectedLabe
       sub: `auto / to AOS ${formatIsoInZone(next.aos, timeZone)}`,
       inPass: false,
       selected: false,
+      targetPass: next,
     };
   }
-  return { phase: "AOS", value: "--:--:--", sub: "no pass in prediction window", inPass: false, selected: false };
+  return { phase: "AOS", value: "--:--:--", sub: "no pass in prediction window", inPass: false, selected: false, targetPass: null };
+}
+
+function buildCommandPassTimer(pass, now, timeZone, commandElevationDeg) {
+  const cmdEl = safeNumber(commandElevationDeg, 0);
+  if (!pass) {
+    return { phase: "CMD", value: "--:--:--", sub: `cmd ≥ ${cmdEl.toFixed(1)} deg / no target pass`, active: false };
+  }
+  if (!pass.commandAos || !pass.commandLos) {
+    return {
+      phase: "CMD",
+      value: "--:--:--",
+      sub: `cmd ≥ ${cmdEl.toFixed(1)} deg / no command window`,
+      active: false,
+    };
+  }
+  if (now < pass.commandAos) {
+    return {
+      phase: "CMD AOS",
+      value: formatDuration(pass.commandAos.getTime() - now.getTime()),
+      sub: `cmd ≥ ${cmdEl.toFixed(1)} deg / to ${formatIsoInZone(pass.commandAos, timeZone)}`,
+      active: false,
+    };
+  }
+  if (now <= pass.commandLos) {
+    return {
+      phase: "CMD LOS",
+      value: formatDuration(pass.commandLos.getTime() - now.getTime()),
+      sub: `cmd ≥ ${cmdEl.toFixed(1)} deg / to ${formatIsoInZone(pass.commandLos, timeZone)}`,
+      active: true,
+    };
+  }
+  return {
+    phase: "CMD DONE",
+    value: "00:00:00",
+    sub: `cmd ended ${formatIsoInZone(pass.commandLos, timeZone)}`,
+    active: false,
+  };
 }
 
 function computeSatState(tle, date) {
@@ -1113,91 +1234,199 @@ function NightOverlay({ now, width, height, projection }) {
   );
 }
 
-function predictPasses(tle, station, startDate, horizonHours = 12, stepSec = 30) {
-  const passes = [];
-  let inPass = false;
-  let current = null;
-  for (let dt = 0; dt <= horizonHours * 3600; dt += stepSec) {
-    const date = new Date(startDate.getTime() + dt * 1000);
-    const obs = computeObservation(tle, station, date, 1);
-    const visible = !!obs?.visible;
-    if (visible && !inPass) {
-      inPass = true;
-      current = { aos: date, los: date, maxElDeg: obs.elDeg, maxElTime: date, rangeAtMaxElKm: obs.rangeKm, minRangeKm: obs.rangeKm };
-    } else if (visible && inPass && current) {
-      current.los = date;
-      if (obs.elDeg > current.maxElDeg) {
-        current.maxElDeg = obs.elDeg;
-        current.maxElTime = date;
-        current.rangeAtMaxElKm = obs.rangeKm;
-      }
-      current.minRangeKm = Math.min(current.minRangeKm, obs.rangeKm);
-    } else if (!visible && inPass && current) {
-      passes.push(current);
-      inPass = false;
-      current = null;
-      if (passes.length >= 8) break;
-    }
-  }
-  if (inPass && current) passes.push(current);
-  return passes;
+function elevationMinusThreshold(tle, station, date, thresholdDeg) {
+  const obs = computeObservation(tle, station, date);
+  if (!obs || !Number.isFinite(obs.elDeg)) return null;
+  return obs.elDeg - thresholdDeg;
 }
 
-function refineVisiblePass(tle, station, startMs, endMs, stepSec = 1) {
-  const visibleRows = [];
+function findElevationCrossingTime(tle, station, leftMs, rightMs, thresholdDeg) {
+  let lo = leftMs;
+  let hi = rightMs;
+  let flo = elevationMinusThreshold(tle, station, new Date(lo), thresholdDeg);
+  let fhi = elevationMinusThreshold(tle, station, new Date(hi), thresholdDeg);
+  if (!Number.isFinite(flo) || !Number.isFinite(fhi)) return new Date(Math.round((leftMs + rightMs) / 2));
+  if (Math.abs(flo) < 1e-9) return new Date(lo);
+  if (Math.abs(fhi) < 1e-9) return new Date(hi);
+  if (flo * fhi > 0) {
+    return new Date(Math.round((leftMs + rightMs) / 2));
+  }
+
+  for (let i = 0; i < 42; i += 1) {
+    const mid = Math.round((lo + hi) / 2);
+    const fm = elevationMinusThreshold(tle, station, new Date(mid), thresholdDeg);
+    if (!Number.isFinite(fm)) break;
+    if (Math.abs(fm) < 1e-7 || hi - lo <= 20) return new Date(mid);
+    if (flo * fm <= 0) {
+      hi = mid;
+      fhi = fm;
+    } else {
+      lo = mid;
+      flo = fm;
+    }
+  }
+  return new Date(Math.round((lo + hi) / 2));
+}
+
+function findMaxElevationInInterval(tle, station, startMs, endMs) {
+  if (endMs <= startMs) {
+    const date = new Date(startMs);
+    return { date, obs: computeObservation(tle, station, date) };
+  }
+  let lo = startMs;
+  let hi = endMs;
+  for (let i = 0; i < 36; i += 1) {
+    const m1 = lo + (hi - lo) / 3;
+    const m2 = hi - (hi - lo) / 3;
+    const e1 = computeObservation(tle, station, new Date(Math.round(m1)))?.elDeg ?? -999;
+    const e2 = computeObservation(tle, station, new Date(Math.round(m2)))?.elDeg ?? -999;
+    if (e1 < e2) lo = m1;
+    else hi = m2;
+  }
+  const candidates = [];
+  const center = Math.round((lo + hi) / 2);
+  for (let dt = -2000; dt <= 2000; dt += 250) {
+    const ms = clamp(center + dt, startMs, endMs);
+    const date = new Date(Math.round(ms));
+    const obs = computeObservation(tle, station, date);
+    if (obs) candidates.push({ date, obs });
+  }
+  if (!candidates.length) {
+    const date = new Date(center);
+    return { date, obs: computeObservation(tle, station, date) };
+  }
+  return candidates.reduce((best, item) => item.obs.elDeg > best.obs.elDeg ? item : best, candidates[0]);
+}
+
+function buildVisibleRows(tle, station, aos, los, thresholdDeg, stepSec = 1) {
+  const rows = [];
+  const startMs = Math.ceil(aos.getTime() / 1000) * 1000;
+  const endMs = Math.floor(los.getTime() / 1000) * 1000;
   for (let ms = startMs; ms <= endMs; ms += stepSec * 1000) {
     const date = new Date(ms);
-    const obs = computeObservation(tle, station, date, 1);
-    if (obs?.visible) visibleRows.push({ date, obs });
+    const obs = computeObservation(tle, station, date);
+    if (obs && obs.elDeg >= thresholdDeg - 1e-6) rows.push({ date, obs });
   }
-  if (!visibleRows.length) return null;
+  if (!rows.length) {
+    const mid = new Date(Math.round((aos.getTime() + los.getTime()) / 2));
+    const obs = computeObservation(tle, station, mid);
+    if (obs) rows.push({ date: mid, obs });
+  }
+  return rows;
+}
 
-  let max = visibleRows[0];
-  let minRange = visibleRows[0];
-  for (const row of visibleRows) {
-    if (row.obs.elDeg > max.obs.elDeg) max = row;
-    if (row.obs.rangeKm < minRange.obs.rangeKm) minRange = row;
+function commandWindowForPass(tle, station, pass, commandElevationDeg) {
+  const cmdEl = safeNumber(commandElevationDeg, station?.minElevationDeg ?? 0);
+  if (!pass || !Number.isFinite(cmdEl)) return { commandAos: null, commandLos: null };
+  if (cmdEl <= (station?.minElevationDeg ?? 0) + 1e-9) return { commandAos: pass.aos, commandLos: pass.los };
+  if (!Number.isFinite(pass.maxElDeg) || pass.maxElDeg < cmdEl) return { commandAos: null, commandLos: null };
+  const aos = findElevationCrossingTime(tle, station, pass.aos.getTime(), pass.maxElTime.getTime(), cmdEl);
+  const los = findElevationCrossingTime(tle, station, pass.maxElTime.getTime(), pass.los.getTime(), cmdEl);
+  return { commandAos: aos, commandLos: los };
+}
+
+function refinePassFromBracket(tle, station, bracketStartMs, bracketEndMs, visibleThresholdDeg, commandElevationDeg = null, stepSec = 1) {
+  const aos = findElevationCrossingTime(tle, station, bracketStartMs, bracketEndMs, visibleThresholdDeg);
+  // This function is used for a single transition bracket only by callers that provide
+  // explicit AOS/LOS brackets. It is kept for compatibility but not used directly.
+  return { aos, los: aos };
+}
+
+function buildPassFromCrossings(tle, station, aosMs, losMs, visibleThresholdDeg, commandElevationDeg = null, stepSec = 1) {
+  const aos = new Date(aosMs);
+  const los = new Date(losMs);
+  const max = findMaxElevationInInterval(tle, station, aosMs, losMs);
+  const rows = buildVisibleRows(tle, station, aos, los, visibleThresholdDeg, stepSec);
+  let minRange = rows[0] || max;
+  for (const row of rows) {
+    if ((row.obs?.rangeKm ?? Infinity) < (minRange.obs?.rangeKm ?? Infinity)) minRange = row;
   }
-  return {
-    aos: visibleRows[0].date,
-    los: visibleRows[visibleRows.length - 1].date,
-    maxElDeg: max.obs.elDeg,
-    maxElTime: max.date,
-    rangeAtMaxElKm: max.obs.rangeKm,
-    minRangeKm: minRange.obs.rangeKm,
-    rows: visibleRows,
+  const pass = {
+    aos,
+    los,
+    maxElDeg: max?.obs?.elDeg ?? 0,
+    maxElTime: max?.date ?? new Date(Math.round((aosMs + losMs) / 2)),
+    rangeAtMaxElKm: max?.obs?.rangeKm ?? minRange?.obs?.rangeKm ?? 0,
+    minRangeKm: minRange?.obs?.rangeKm ?? max?.obs?.rangeKm ?? 0,
+    rows,
   };
+  return { ...pass, ...commandWindowForPass(tle, station, pass, commandElevationDeg ?? visibleThresholdDeg) };
+}
+
+function predictPasses(tle, station, startDate, horizonHours = 12, stepSec = 30, commandElevationDeg = null) {
+  const visibleThresholdDeg = safeNumber(station?.minElevationDeg, 0);
+  const stepMs = Math.max(1, safeNumber(stepSec, 30)) * 1000;
+  const requestedStartMs = startDate.getTime();
+  const requestedEndMs = requestedStartMs + horizonHours * 3600 * 1000;
+  const searchStartMs = requestedStartMs - 90 * 60 * 1000;
+  const searchEndMs = requestedEndMs + 90 * 60 * 1000;
+  const intervals = [];
+
+  let prevMs = searchStartMs;
+  let prevObs = computeObservation(tle, station, new Date(prevMs));
+  let prevVisible = !!prevObs && prevObs.elDeg >= visibleThresholdDeg;
+  let inPass = prevVisible;
+  let aosBracket = inPass ? { left: searchStartMs, right: searchStartMs } : null;
+  let passStartMs = inPass ? searchStartMs : null;
+
+  for (let ms = searchStartMs + stepMs; ms <= searchEndMs; ms += stepMs) {
+    const obs = computeObservation(tle, station, new Date(ms));
+    const visible = !!obs && obs.elDeg >= visibleThresholdDeg;
+    if (visible && !prevVisible) {
+      aosBracket = { left: prevMs, right: ms };
+      passStartMs = findElevationCrossingTime(tle, station, prevMs, ms, visibleThresholdDeg).getTime();
+      inPass = true;
+    } else if (!visible && prevVisible && inPass) {
+      const losMs = findElevationCrossingTime(tle, station, prevMs, ms, visibleThresholdDeg).getTime();
+      intervals.push({ aosMs: passStartMs ?? (aosBracket ? findElevationCrossingTime(tle, station, aosBracket.left, aosBracket.right, visibleThresholdDeg).getTime() : prevMs), losMs });
+      inPass = false;
+      passStartMs = null;
+      aosBracket = null;
+    }
+    prevMs = ms;
+    prevObs = obs;
+    prevVisible = visible;
+  }
+  if (inPass && passStartMs !== null) intervals.push({ aosMs: passStartMs, losMs: searchEndMs });
+
+  return intervals
+    .filter((interval) => interval.losMs >= requestedStartMs && interval.aosMs <= requestedEndMs)
+    .map((interval) => buildPassFromCrossings(tle, station, interval.aosMs, interval.losMs, visibleThresholdDeg, commandElevationDeg, 1))
+    .filter(Boolean)
+    .slice(0, 64);
+}
+
+function refineVisiblePass(tle, station, startMs, endMs, stepSec = 1, commandElevationDeg = null) {
+  const visibleThresholdDeg = safeNumber(station?.minElevationDeg, 0);
+  let prevMs = startMs;
+  let prevObs = computeObservation(tle, station, new Date(prevMs));
+  let prevVisible = !!prevObs && prevObs.elDeg >= visibleThresholdDeg;
+  let aosMs = null;
+  let losMs = null;
+  for (let ms = startMs + 1000; ms <= endMs; ms += 1000) {
+    const obs = computeObservation(tle, station, new Date(ms));
+    const visible = !!obs && obs.elDeg >= visibleThresholdDeg;
+    if (visible && !prevVisible && aosMs === null) aosMs = findElevationCrossingTime(tle, station, prevMs, ms, visibleThresholdDeg).getTime();
+    if (!visible && prevVisible && aosMs !== null) {
+      losMs = findElevationCrossingTime(tle, station, prevMs, ms, visibleThresholdDeg).getTime();
+      break;
+    }
+    prevMs = ms;
+    prevObs = obs;
+    prevVisible = visible;
+  }
+  if (aosMs === null && prevVisible) aosMs = startMs;
+  if (aosMs === null) return null;
+  if (losMs === null) losMs = endMs;
+  return buildPassFromCrossings(tle, station, aosMs, losMs, visibleThresholdDeg, commandElevationDeg, stepSec);
 }
 
 function computeDayPassesForExport(tle, station, ops) {
   const tz = ops.timezone || "Asia/Tokyo";
   const dayStart = parseObservationStartUtc(ops.observationDate, tz);
+  const passes = predictPasses(tle, station, dayStart, 24, 10, ops.commandElevationDeg);
   const dayEnd = new Date(dayStart.getTime() + 24 * 3600 * 1000);
-  const searchStartMs = dayStart.getTime() - 90 * 60 * 1000;
-  const searchEndMs = dayEnd.getTime() + 90 * 60 * 1000;
-  const coarseStepMs = 10 * 1000;
-
-  const intervals = [];
-  let visible = false;
-  let startMs = null;
-  for (let ms = searchStartMs; ms <= searchEndMs; ms += coarseStepMs) {
-    const obs = computeObservation(tle, station, new Date(ms), 1);
-    const v = !!obs?.visible;
-    if (v && !visible) {
-      visible = true;
-      startMs = ms;
-    } else if (!v && visible) {
-      intervals.push({ startMs, endMs: ms });
-      visible = false;
-      startMs = null;
-    }
-  }
-  if (visible && startMs !== null) intervals.push({ startMs, endMs: searchEndMs });
-
-  return intervals
-    .map((interval) => refineVisiblePass(tle, station, interval.startMs - 60_000, interval.endMs + 60_000, 1))
-    .filter(Boolean)
-    .filter((pass) => pass.los >= dayStart && pass.aos <= dayEnd);
+  return passes.filter((pass) => pass.los >= dayStart && pass.aos <= dayEnd);
 }
 
 function sanitizePathPart(text) {
@@ -1714,12 +1943,12 @@ function PassTable({
   timeZone,
   selectedPassIndices = [],
   selectedOperationPassKeys = [],
+  operationPassRegistry = {},
   onSelectPass,
   onSelectOperationPass,
   onCopyPassText,
 }) {
   const selectedSet = new Set(selectedPassIndices);
-  const operationSet = new Set(selectedOperationPassKeys);
   const isDay = isOneDayMode(passWindowMode);
   return (
     <section className="panel pass-panel">
@@ -1766,7 +1995,8 @@ function PassTable({
             {passes.map((pass, i) => {
               const radarSelected = selectedSet.has(i);
               const operationKey = passStableKey(pass);
-              const opsSelected = operationSet.has(operationKey);
+              const matchedOperationKey = findOperationKeyForPass(pass, selectedOperationPassKeys, operationPassRegistry);
+              const opsSelected = Boolean(matchedOperationKey);
               const rowClass = [radarSelected ? "selected-pass-row" : "clickable-pass-row", opsSelected ? "operation-pass-row" : ""].filter(Boolean).join(" ");
               return (
                 <tr key={i} className={rowClass} onClick={() => onSelectPass?.(i)}>
@@ -1776,7 +2006,7 @@ function PassTable({
                       className={opsSelected ? "mini-pill selected" : "mini-pill"}
                       onClick={(event) => {
                         event.stopPropagation();
-                        onSelectOperationPass?.(operationKey, pass, i);
+                        onSelectOperationPass?.(matchedOperationKey || operationKey, pass, i);
                       }}
                       title={opsSelected ? "Remove this pass from the operation schedule" : "Add this pass to the operation schedule"}
                     >
@@ -1813,11 +2043,26 @@ function formatPassBrief(pass, timeZone) {
 
 function passStableKey(pass) {
   if (!pass?.aos || !pass?.los) return "";
-  return [
-    pass.aos.getTime(),
-    pass.los.getTime(),
-    Math.round((pass.maxElDeg ?? 0) * 10),
-  ].join(":");
+  const aosMinute = Math.round(pass.aos.getTime() / 60000);
+  const losMinute = Math.round(pass.los.getTime() / 60000);
+  return [aosMinute, losMinute].join(":");
+}
+
+function operationPassMatches(pass, operationKey, registryItem = null) {
+  if (!pass) return false;
+  if (operationKey && operationKey === passStableKey(pass)) return true;
+  const snapshot = registryItem?.pass ? revivePassSnapshot(registryItem.pass) : null;
+  if (!snapshot) return false;
+  const aosDiff = Math.abs(snapshot.aos.getTime() - pass.aos.getTime());
+  const losDiff = Math.abs(snapshot.los.getTime() - pass.los.getTime());
+  return aosDiff <= 90_000 && losDiff <= 90_000;
+}
+
+function findOperationKeyForPass(pass, operationPassKeys = [], operationPassRegistry = {}) {
+  for (const key of operationPassKeys) {
+    if (operationPassMatches(pass, key, operationPassRegistry[key])) return key;
+  }
+  return null;
 }
 
 function passToSnapshot(pass) {
@@ -1829,6 +2074,8 @@ function passToSnapshot(pass) {
     maxElDeg: safeNumber(pass.maxElDeg, 0),
     minRangeKm: safeNumber(pass.minRangeKm, 0),
     rangeAtMaxElKm: safeNumber(pass.rangeAtMaxElKm ?? pass.minRangeKm, 0),
+    commandAos: pass.commandAos?.toISOString?.() || null,
+    commandLos: pass.commandLos?.toISOString?.() || null,
   };
 }
 
@@ -1841,6 +2088,8 @@ function revivePassSnapshot(snapshot) {
     maxElDeg: safeNumber(snapshot.maxElDeg, 0),
     minRangeKm: safeNumber(snapshot.minRangeKm, snapshot.rangeAtMaxElKm ?? 0),
     rangeAtMaxElKm: safeNumber(snapshot.rangeAtMaxElKm, snapshot.minRangeKm ?? 0),
+    commandAos: snapshot.commandAos ? new Date(snapshot.commandAos) : null,
+    commandLos: snapshot.commandLos ? new Date(snapshot.commandLos) : null,
   };
 }
 
@@ -2030,6 +2279,8 @@ function MissionSetupPanel({
   skylineProfile,
   orbitTrackColorMode,
   onOrbitTrackColorModeChange,
+  commandElevationDeg,
+  onCommandElevationDegChange,
   missionStatusItems = [],
 }) {
   const fetchRequired = tleSourceCount > 0 && missionStatusItems.some((item) => item.label === "TLE" && item.state === "warn");
@@ -2124,6 +2375,15 @@ function MissionSetupPanel({
                 <option value="satellite">Satellite color</option>
               </select>
             </label>
+            <label>
+              Command AOS/LOS Elevation [deg]
+              <input
+                type="number"
+                step="0.1"
+                value={commandElevationDeg}
+                onChange={(event) => onCommandElevationDegChange?.(Number(event.target.value))}
+              />
+            </label>
           </div>
           <div className="setup-button-grid">
             <button className="button" onClick={onUseBundledMap}>Bundled Map</button>
@@ -2206,7 +2466,7 @@ function App() {
   const [selectedOperationPassKeys, setSelectedOperationPassKeys] = useState([]);
   const [operationPassRegistry, setOperationPassRegistry] = useState({});
   const [skylineProfile, setSkylineProfile] = useState(null);
-  const [passWindowMode, setPassWindowMode] = useState("1day");
+  const [passWindowMode, setPassWindowMode] = useState("24");
   const [passDate, setPassDate] = useState(() => formatYmdInZone(new Date(), initialConfig.ops.timezone || "Asia/Tokyo"));
   const [csvDate, setCsvDate] = useState(() => formatYmdInZone(new Date(), initialConfig.ops.timezone || "Asia/Tokyo"));
 
@@ -2254,8 +2514,8 @@ function App() {
   const predictionStartDate = useMemo(() => predictionStartDateFromMode(now, opsConfig.timezone || "Asia/Tokyo", passWindowMode, passDate), [predictionTimeKey, opsConfig.timezone, passWindowMode, passDate]);
   const passes = useMemo(() => {
     if (!selectedSat || !selectedStation) return [];
-    return predictPasses(selectedSat, selectedStation, predictionStartDate, effectivePredictionHorizonHours, safeNumber(appConfig.predictionStepSec, 30));
-  }, [selectedSat, selectedStation, predictionStartDate, effectivePredictionHorizonHours, appConfig.predictionStepSec]);
+    return predictPasses(selectedSat, selectedStation, predictionStartDate, effectivePredictionHorizonHours, safeNumber(appConfig.predictionStepSec, 30), opsConfig.commandElevationDeg);
+  }, [selectedSat, selectedStation, predictionStartDate, effectivePredictionHorizonHours, appConfig.predictionStepSec, opsConfig.commandElevationDeg]);
 
   const activePassIndex = passes.findIndex((pass) => now >= pass.aos && now <= pass.los);
   const activePass = activePassIndex >= 0 ? passes[activePassIndex] : null;
@@ -2287,7 +2547,7 @@ function App() {
   const operationPassEntries = selectedOperationPassKeys
     .map((key) => {
       const registryItem = operationPassRegistry[key];
-      const visibleIndex = passes.findIndex((pass) => passStableKey(pass) === key);
+      const visibleIndex = passes.findIndex((pass) => operationPassMatches(pass, key, registryItem));
       const visiblePass = visibleIndex >= 0 ? passes[visibleIndex] : null;
       const snapshotPass = registryItem?.pass ? revivePassSnapshot(registryItem.pass) : null;
       const pass = visiblePass || snapshotPass;
@@ -2304,8 +2564,9 @@ function App() {
     now,
     opsConfig.timezone || "Asia/Tokyo",
     operationTimerEntry?.pass || null,
-    operationTimerEntry ? `OPS #${operationTimerEntry.index + 1}/${operationPassEntries.length}` : null
+    operationTimerEntry ? `OPS #${operationTimerEntry.index >= 0 ? operationTimerEntry.index + 1 : "saved"}/${operationPassEntries.length}` : null
   );
+  const commandPassTimer = buildCommandPassTimer(passTimer.targetPass, now, opsConfig.timezone || "Asia/Tokyo", opsConfig.commandElevationDeg);
 
   const tleFetchNeedsAction = tleSources.length > 0 && tleFetchStatus.state !== "fetched";
   const missionStatusItems = [
@@ -2338,6 +2599,12 @@ function App() {
       label: "OPS",
       value: `${selectedOperationPassKeys.length} reserved`,
       state: selectedOperationPassKeys.length ? "ok" : "neutral",
+    },
+    {
+      label: "CMD EL",
+      value: `${safeNumber(opsConfig.commandElevationDeg, 0).toFixed(1)} deg`,
+      state: "neutral",
+      hint: "command AOS/LOS",
     },
     {
       label: "CSV",
@@ -2720,7 +2987,7 @@ function App() {
   }
 
   async function copyPassTableText() {
-    const text = buildPassCopyText(passes, opsConfig.timezone || "Asia/Tokyo", selectedOperationPassKeys);
+    const text = buildPassCopyText(passes, opsConfig.timezone || "Asia/Tokyo", selectedOperationPassKeys, operationPassRegistry);
     try {
       await navigator.clipboard.writeText(text);
       setConfigMessage("パス予測テキストをクリップボードにコピーしました。");
@@ -2801,6 +3068,8 @@ function App() {
           skylineProfile={skylineProfile}
           orbitTrackColorMode={orbitTrackConfig.colorMode}
           onOrbitTrackColorModeChange={(value) => setOrbitTrackConfig((prev) => ({ ...prev, colorMode: value }))}
+          commandElevationDeg={opsConfig.commandElevationDeg}
+          onCommandElevationDegChange={(value) => setOpsConfig((prev) => ({ ...prev, commandElevationDeg: Number.isFinite(value) ? value : prev.commandElevationDeg }))}
           missionStatusItems={missionStatusItems}
         />
 
@@ -2816,7 +3085,18 @@ function App() {
         <SevenSegment label="AZIMUTH" value={look ? look.azDeg.toFixed(1) : "--.-"} sub="deg" />
         <SevenSegment label="ELEVATION" value={look ? look.elDeg.toFixed(1) : "--.-"} sub="deg" accent={look?.visible ? "visible" : "hidden"} />
         <SevenSegment label="RANGE" value={look ? look.rangeKm.toFixed(0) : "----"} sub="km" />
-        <SevenSegment label={`PASS TIMER ${passTimer.phase}`} value={passTimer.value} sub={passTimer.sub} accent={passTimer.inPass ? "visible" : ""} />
+        <SevenSegment
+          label={`PASS TIMER ${passTimer.phase}`}
+          value={passTimer.value}
+          sub={passTimer.sub}
+          accent={passTimer.inPass ? "visible" : ""}
+        />
+        <SevenSegment
+          label={commandPassTimer.phase}
+          value={commandPassTimer.value}
+          sub={commandPassTimer.sub}
+          accent={commandPassTimer.active ? "visible" : "command"}
+        />
       </section>
 
       <ViewModeSelector viewMode={viewMode} onChange={setViewMode} />
@@ -2900,6 +3180,7 @@ function App() {
         timeZone={opsConfig.timezone || "Asia/Tokyo"}
         selectedPassIndices={pinnedPassIndices}
         selectedOperationPassKeys={selectedOperationPassKeys}
+        operationPassRegistry={operationPassRegistry}
         onSelectPass={toggleSelectedRadarPass}
         onSelectOperationPass={toggleOperationPass}
           onCopyPassText={copyPassTableText}
@@ -2929,6 +3210,7 @@ function App() {
           <DataCard label="Range" value={look ? `${look.rangeKm.toFixed(0)} km` : "--"} />
           <DataCard label="Range Rate" value={currentObservation ? `${currentObservation.rangeRateMps.toFixed(1)} m/s` : "--"} />
           <DataCard label="Pass Timer" value={`${passTimer.phase} ${passTimer.value}`} accent={passTimer.inPass ? "ok" : undefined} />
+          <DataCard label="Command Timer" value={`${commandPassTimer.phase} ${commandPassTimer.value}`} accent={commandPassTimer.active ? "ok" : undefined} />
           <DataCard label="Orbit Sunlight" value={currentEclipse.mode} accent={currentSunlit ? "ok" : "ng"} />
           <DataCard label="Ground Light" value={groundLight.solarElevationDeg !== null ? `${groundLight.mode} / ${groundLight.solarElevationDeg.toFixed(2)} deg` : "--"} accent={groundLight.mode === "DAY" ? "ok" : "ng"} />
           <DataCard label="Umbra Geometry" value={currentEclipse.separationDeg !== null ? `sep ${currentEclipse.separationDeg.toFixed(3)} / Earth ${currentEclipse.earthAngularDeg.toFixed(3)} / Sun ${currentEclipse.sunAngularDeg.toFixed(3)} deg` : "--"} />
