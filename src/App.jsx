@@ -28,17 +28,7 @@ const CONFIG_STORAGE_KEYS = [
 
 
 const DEFAULT_TLE_SOURCES_TEXT = `# name@url 形式で1行1件を指定します。http://celestrak.org はブラウザ混在コンテンツ対策として https に補正します。
-OBJECT A@https://celestrak.org/NORAD/elements/gp.php?CATNR=68792&FORMAT=TLE
-OBJECT B@https://celestrak.org/NORAD/elements/gp.php?CATNR=68793&FORMAT=TLE
-OBJECT C@https://celestrak.org/NORAD/elements/gp.php?CATNR=68794&FORMAT=TLE
-OBJECT D@https://celestrak.org/NORAD/elements/gp.php?CATNR=68795&FORMAT=TLE
-OBJECT E@https://celestrak.org/NORAD/elements/gp.php?CATNR=68796&FORMAT=TLE
-OBJECT F@https://celestrak.org/NORAD/elements/gp.php?CATNR=68797&FORMAT=TLE
-OBJECT G@https://celestrak.org/NORAD/elements/gp.php?CATNR=68798&FORMAT=TLE
-OBJECT H@https://celestrak.org/NORAD/elements/gp.php?CATNR=68799&FORMAT=TLE
-ELECTRON R/B@https://celestrak.org/NORAD/elements/gp.php?CATNR=68800&FORMAT=TLE
-ELECTRON KICK STAGE R/B@https://celestrak.org/NORAD/elements/gp.php?CATNR=68801&FORMAT=TLE
-RAISE-4@https://celestrak.org/NORAD/elements/gp.php?CATNR=67073&FORMAT=TLE`;
+ISS (ZARYA)@https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=TLE`;
 
 
 const DEFAULT_RAW_CONFIG = {
@@ -484,7 +474,7 @@ function dumpYaml(config) {
 }
 
 function buildTemplateYaml() {
-  return `# SatPass Ops Console 設定例 v14
+  return `# SatPass Ops Console 設定例 v24
 # 1ファイル運用も、分割YAML運用も可能です。
 # 分割する場合は、ground_stations.yaml / satellites.yaml / doppler.yaml / settings.yaml / map.yaml / radar.yaml / orbit_track.yaml を
 # Import YAML(s)/JSON で複数選択してください。
@@ -524,19 +514,10 @@ satellites:
       2 25544  51.6400 120.0000 0006000  20.0000 340.0000 15.50000000000000
 
 # TLE取得元。name@url 形式の複数行文字列、配列、または satellites[].tle_url に対応します。
+# YAML一発設定でURL取得を使う場合は、下記のコメントを外して対象衛星を追加してください。
 # CelesTrak gp.php は FORMAT=TLE を推奨します。
-tle_sources: |
-  OBJECT A@https://celestrak.org/NORAD/elements/gp.php?CATNR=68792&FORMAT=TLE
-  OBJECT B@https://celestrak.org/NORAD/elements/gp.php?CATNR=68793&FORMAT=TLE
-  OBJECT C@https://celestrak.org/NORAD/elements/gp.php?CATNR=68794&FORMAT=TLE
-  OBJECT D@https://celestrak.org/NORAD/elements/gp.php?CATNR=68795&FORMAT=TLE
-  OBJECT E@https://celestrak.org/NORAD/elements/gp.php?CATNR=68796&FORMAT=TLE
-  OBJECT F@https://celestrak.org/NORAD/elements/gp.php?CATNR=68797&FORMAT=TLE
-  OBJECT G@https://celestrak.org/NORAD/elements/gp.php?CATNR=68798&FORMAT=TLE
-  OBJECT H@https://celestrak.org/NORAD/elements/gp.php?CATNR=68799&FORMAT=TLE
-  ELECTRON R/B@https://celestrak.org/NORAD/elements/gp.php?CATNR=68800&FORMAT=TLE
-  ELECTRON KICK STAGE R/B@https://celestrak.org/NORAD/elements/gp.php?CATNR=68801&FORMAT=TLE
-  RAISE-4@https://celestrak.org/NORAD/elements/gp.php?CATNR=67073&FORMAT=TLE
+# tle_sources: |
+#   ISS (ZARYA)@https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=TLE
 
 # ブラウザ表示設定
 app:
@@ -1807,6 +1788,46 @@ function SatelliteDisplayPanel({ satellites, visibleSatIds, onToggle, onSetAllVi
   );
 }
 
+function OperationTargetPanel({
+  selectedSat,
+  satellites,
+  onSelectedSatChange,
+  selectedStation,
+  stations,
+  onSelectedStationChange,
+  visibleSatIds,
+  onToggleVisibleSatellite,
+  onSetAllVisible,
+  onOpenSetup,
+}) {
+  return (
+    <section className="panel operation-target-panel">
+      <div className="operation-target-head">
+        <div>
+          <h2>Tracking / Display</h2>
+          <p className="muted small">運用中に頻繁に触る追尾衛星・地上局・地図表示衛星だけをここで切り替えます。設定の正本はYAMLです。</p>
+        </div>
+        <button className="button compact setup-button" onClick={onOpenSetup}>YAML Setup</button>
+      </div>
+      <div className="operation-target-grid">
+        <label>
+          Tracking Satellite
+          <select value={selectedSat?.id ?? ""} onChange={(event) => onSelectedSatChange(event.target.value)}>
+            {satellites.map((sat) => <option key={sat.id} value={sat.id}>{sat.name}</option>)}
+          </select>
+        </label>
+        <label>
+          Ground Station
+          <select value={selectedStation?.id ?? ""} onChange={(event) => onSelectedStationChange(event.target.value)}>
+            {stations.map((station) => <option key={station.id} value={station.id}>{station.name}</option>)}
+          </select>
+        </label>
+        <SatelliteDisplayPanel satellites={satellites} visibleSatIds={visibleSatIds} onToggle={onToggleVisibleSatellite} onSetAllVisible={onSetAllVisible} />
+      </div>
+    </section>
+  );
+}
+
 function ViewModeSelector({ viewMode, onChange }) {
   return (
     <div className="view-mode-row">
@@ -1828,8 +1849,8 @@ function SettingsDialog({ open, onClose, children }) {
       <section className="settings-modal-window" role="dialog" aria-modal="true" aria-label="Mission setup and YAML settings">
         <div className="settings-modal-header">
           <div>
-            <h2>Mission Setup / YAML Settings</h2>
-            <p className="muted small">運用画面から分離した設定ウィンドウです。TLE追加・対象選択・YAML入出力をここで行います。</p>
+            <h2>YAML Setup / Optional Satellite Add</h2>
+            <p className="muted small">基本はYAML一括設定です。追加で衛星を試す場合だけ、Quick Satellite Addを使います。追尾衛星・表示衛星の切替は運用画面側で行います。</p>
           </div>
           <button className="button compact" onClick={onClose}>Close</button>
         </div>
@@ -1844,7 +1865,6 @@ function MissionSetupPanel({
   onQuickTleTextChange,
   onAddQuickTle,
   onAddAndFetchQuickTle,
-  onLoadDefaultTleSources,
   onFetchTleSources,
   tleSourceCount,
   exporting,
@@ -1870,53 +1890,33 @@ function MissionSetupPanel({
       <div className="panel-title-row mission-title-row">
         <div>
           <h2>Mission Setup</h2>
-          <p className="muted small">TLE追加・対象選択・YAML入出力をここに集約します。設定の正本はYAMLです。</p>
+          <p className="muted small">運用設定はYAML一括読み込みが基本です。Quick Satellite Addは、後から衛星を試しに追加するための補助欄です。</p>
         </div>
         <div className="mission-status-chip">TLE sources: <strong>{tleSourceCount}</strong></div>
       </div>
 
       <div className="mission-setup-grid">
         <div className="quick-tle-card">
-          <div className="step-label">1 / Add TLE</div>
+          <div className="step-label">Optional / Quick Satellite Add</div>
           <label className="quick-tle-label">
-            TLE URL list or 3-line TLE
+            Paste name@URL list or 3-line TLE here
             <textarea
               className="quick-tle-textarea mono"
               spellCheck="false"
               value={quickTleText}
               onChange={(event) => onQuickTleTextChange(event.target.value)}
-              placeholder={'OBJECT A@https://celestrak.org/NORAD/elements/gp.php?CATNR=68792&FORMAT=TLE\n\nまたは\nSAT NAME\n1 .....\n2 .....'}
+              placeholder={'ISS (ZARYA)@https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=TLE\n\nまたは\nSAT NAME\n1 .....\n2 .....'}
             />
           </label>
           <div className="quick-action-row">
             <button className="button primary" onClick={onAddAndFetchQuickTle} disabled={exporting}>Add & Fetch</button>
             <button className="button" onClick={onAddQuickTle}>Add to YAML</button>
-            <button className="button" onClick={onLoadDefaultTleSources}>KAKUSHIN URLs</button>
-            <button className="button" onClick={onFetchTleSources} disabled={exporting || !tleSourceCount}>Fetch all</button>
+            <button className="button" onClick={onFetchTleSources} disabled={exporting || !tleSourceCount}>Fetch YAML URLs</button>
           </div>
-        </div>
-
-        <div className="target-select-card">
-          <div className="step-label">2 / Select Target</div>
-          <div className="target-select-grid">
-            <label>
-              Satellite
-              <select value={selectedSat?.id ?? ""} onChange={(event) => onSelectedSatChange(event.target.value)}>
-                {satellites.map((sat) => <option key={sat.id} value={sat.id}>{sat.name}</option>)}
-              </select>
-            </label>
-            <label>
-              Ground Station
-              <select value={selectedStation?.id ?? ""} onChange={(event) => onSelectedStationChange(event.target.value)}>
-                {stations.map((station) => <option key={station.id} value={station.id}>{station.name}</option>)}
-              </select>
-            </label>
-          </div>
-          <SatelliteDisplayPanel satellites={satellites} visibleSatIds={visibleSatIds} onToggle={onToggleVisibleSatellite} onSetAllVisible={onSetAllVisible} />
         </div>
 
         <div className="yaml-tools-card">
-          <div className="step-label">3 / YAML & Tools</div>
+          <div className="step-label">2 / YAML & Tools</div>
           <div className="quick-action-grid">
             <label className="button file-button primary">
               Import YAML
@@ -2118,7 +2118,7 @@ function App() {
   }
 
   function downloadTleSourceTemplate() {
-    downloadText("kakushin_rising_tle_sources.yaml", `# KAKUSHIN RISING OBJECT A-H / Rocket bodies / RAISE-4\n# 取得は Fetch TLE URLs ボタンで実行します。\ntle_sources: |\n${DEFAULT_TLE_SOURCES_TEXT.split("\n").filter((line) => line.trim() && !line.trim().startsWith("#")).map((line) => `  ${line}`).join("\n")}\n`, "application/x-yaml");
+    downloadText("tle_sources_example.yaml", `# TLE URL source example\n# name@url 形式で1行1件を指定します。取得は Fetch YAML URLs / Add & Fetch で実行します。\ntle_sources: |\n${DEFAULT_TLE_SOURCES_TEXT.split("\n").filter((line) => line.trim() && !line.trim().startsWith("#")).map((line) => `  ${line}`).join("\n")}\n`, "application/x-yaml");
   }
 
   function loadDefaultTleSources() {
@@ -2132,7 +2132,7 @@ function App() {
         return dumpYaml({ tle_sources: sources.map((source) => ({ name: source.name, url: source.url })) });
       }
     });
-    setConfigMessage(`KAKUSHIN RISING系TLE取得元を読み込みました。source_count=${sources.length}`);
+    setConfigMessage(`サンプルTLE取得元を読み込みました。source_count=${sources.length}`);
   }
 
   function syncEditorFromCurrent() {
@@ -2303,7 +2303,7 @@ function App() {
 
       const sourceMessage = patch.sources.length ? `TLE source=${patch.sources.length}` : "";
       const satMessage = patch.satellites.length ? `TLE sat=${patch.satellites.length}` : "";
-      setConfigMessage(`Quick TLE をYAMLへ反映しました。${[sourceMessage, satMessage].filter(Boolean).join(", ") || "no item"}`);
+      setConfigMessage(`Quick Satellite Add をYAMLへ反映しました。${[sourceMessage, satMessage].filter(Boolean).join(", ") || "no item"}`);
 
       if (fetchAfter) {
         if (!patch.sources.length) {
@@ -2313,7 +2313,7 @@ function App() {
         await fetchTleSourceList(patch.sources, "Quick TLE");
       }
     } catch (error) {
-      setConfigMessage(`Quick TLE の取り込みに失敗しました: ${error.message}`);
+      setConfigMessage(`Quick Satellite Add の取り込みに失敗しました: ${error.message}`);
     }
   }
 
@@ -2412,7 +2412,7 @@ function App() {
         <div className="top-actions runtime-actions">
           <button className="button primary" onClick={() => setRunning((v) => !v)}>{running ? "Pause" : "Run"}</button>
           <button className="button" onClick={() => setClockNow(new Date())}>Now</button>
-          <button className="button setup-button" onClick={() => setSettingsOpen(true)}>Mission Setup / YAML</button>
+          <button className="button setup-button" onClick={() => setSettingsOpen(true)}>YAML Setup</button>
           <button className="button github-button" onClick={openGitHubRepository}>GitHub</button>
           <label className="offset-control">Offset min<input type="number" step="1" value={timeOffsetMinutes} onChange={(e) => setTimeOffsetMinutes(e.target.value)} /></label>
           <button className="button" onClick={() => setTimeOffsetMinutes(0)}>Offset 0</button>
@@ -2428,25 +2428,28 @@ function App() {
         selectedStation={selectedStation}
       />
 
+      <OperationTargetPanel
+        selectedSat={selectedSat}
+        satellites={satellites}
+        onSelectedSatChange={setSelectedSatId}
+        selectedStation={selectedStation}
+        stations={stations}
+        onSelectedStationChange={setSelectedStationId}
+        visibleSatIds={visibleSatIds}
+        onToggleVisibleSatellite={toggleVisibleSatellite}
+        onSetAllVisible={setAllSatellitesVisible}
+        onOpenSetup={() => setSettingsOpen(true)}
+      />
+
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)}>
         <MissionSetupPanel
           quickTleText={quickTleText}
           onQuickTleTextChange={setQuickTleText}
           onAddQuickTle={() => applyQuickTleInput({ fetchAfter: false })}
           onAddAndFetchQuickTle={() => applyQuickTleInput({ fetchAfter: true })}
-          onLoadDefaultTleSources={loadDefaultTleSources}
           onFetchTleSources={fetchTleSources}
           tleSourceCount={tleSources.length}
           exporting={exporting}
-          selectedSat={selectedSat}
-          satellites={satellites}
-          onSelectedSatChange={setSelectedSatId}
-          selectedStation={selectedStation}
-          stations={stations}
-          onSelectedStationChange={setSelectedStationId}
-          visibleSatIds={visibleSatIds}
-          onToggleVisibleSatellite={toggleVisibleSatellite}
-          onSetAllVisible={setAllSatellitesVisible}
           onImportConfigFile={importConfigFile}
           onDownloadTemplate={downloadTemplate}
           onDownloadTleSourceTemplate={downloadTleSourceTemplate}
@@ -2458,7 +2461,7 @@ function App() {
           <section className="config-grid settings-modal-config-grid">
           <section className="panel control-panel">
             <h2>Advanced Display Settings</h2>
-            <p className="muted small">地図・レーダー背景・軌道色分けなど、表示系だけを調整します。TLE追加と対象選択は Mission Setup / YAML ウィンドウに集約しています。</p>
+            <p className="muted small">地図・レーダー背景・軌道色分けなど、表示系だけを調整します。追尾衛星・表示衛星は運用画面側で切り替えます。</p>
             <label>
               Map Preset
               <select defaultValue="" onChange={(e) => applyRecommendedMap(e.target.value)}>

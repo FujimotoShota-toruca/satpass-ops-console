@@ -1,0 +1,31 @@
+# SatPass Ops Console KAKUSHIN RISING URL運用設定例
+# URL方式では、YAML読み込み後に YAML Setup -> Fetch YAML URLs を押してください。
+
+settings:
+  timezone: Asia/Tokyo
+  min_elevation_deg: 0.0
+
+doppler:
+  uplink_base_frequency_hz: 145000000
+  downlink_base_frequency_hz: 430000000
+
+ground_stations:
+  - id: utsunomiya
+    name: Utsunomiya GS
+    latitude_deg: 36.604900972404
+    longitude_deg: 139.88146470024
+    altitude_m: 172.0032
+    min_elevation_deg: 0.0
+
+tle_sources: |
+  OBJECT A@https://celestrak.org/NORAD/elements/gp.php?CATNR=68792&FORMAT=TLE
+  OBJECT B@https://celestrak.org/NORAD/elements/gp.php?CATNR=68793&FORMAT=TLE
+  OBJECT C@https://celestrak.org/NORAD/elements/gp.php?CATNR=68794&FORMAT=TLE
+  OBJECT D@https://celestrak.org/NORAD/elements/gp.php?CATNR=68795&FORMAT=TLE
+  OBJECT E@https://celestrak.org/NORAD/elements/gp.php?CATNR=68796&FORMAT=TLE
+  OBJECT F@https://celestrak.org/NORAD/elements/gp.php?CATNR=68797&FORMAT=TLE
+  OBJECT G@https://celestrak.org/NORAD/elements/gp.php?CATNR=68798&FORMAT=TLE
+  OBJECT H@https://celestrak.org/NORAD/elements/gp.php?CATNR=68799&FORMAT=TLE
+  ELECTRON R/B@https://celestrak.org/NORAD/elements/gp.php?CATNR=68800&FORMAT=TLE
+  ELECTRON KICK STAGE R/B@https://celestrak.org/NORAD/elements/gp.php?CATNR=68801&FORMAT=TLE
+  RAISE-4@https://celestrak.org/NORAD/elements/gp.php?CATNR=67073&FORMAT=TLE

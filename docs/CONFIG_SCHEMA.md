@@ -1,3 +1,7 @@
+# Config Schema
+
+詳細なYAML仕様はルートの `YamlSpecification.md` および `docs/YAML_SPEC.md` も参照してください。
+
 # Configuration Schema
 
 SatPass Ops Console v8 は、従来の単一YAML形式と、分割YAML形式の両方を受け付けます。
@@ -104,8 +108,7 @@ tle: |
 
 ```yaml
 tle_sources: |
-  OBJECT A@https://celestrak.org/NORAD/elements/gp.php?CATNR=68792&FORMAT=TLE
-  OBJECT B@https://celestrak.org/NORAD/elements/gp.php?CATNR=68793&FORMAT=TLE
+  ISS (ZARYA)@https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=TLE
   RAISE-4@https://celestrak.org/NORAD/elements/gp.php?CATNR=67073&FORMAT=TLE
 ```
 
@@ -113,8 +116,8 @@ tle_sources: |
 
 ```yaml
 tle_sources:
-  - name: OBJECT A
-    url: https://celestrak.org/NORAD/elements/gp.php?CATNR=68792&FORMAT=TLE
+  - name: ISS (ZARYA)
+    url: https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=TLE
   - name: RAISE-4
     catnr: 67073
 ```
@@ -123,9 +126,9 @@ tle_sources:
 
 ```yaml
 satellites:
-  - id: object-a
-    name: OBJECT A
-    catnr: 68792
+  - id: iss
+    name: ISS (ZARYA)
+    catnr: 25544
   - id: raise-4
     name: RAISE-4
     tle_url: https://celestrak.org/NORAD/elements/gp.php?CATNR=67073&FORMAT=TLE

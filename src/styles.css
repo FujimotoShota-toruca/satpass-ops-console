@@ -2069,3 +2069,62 @@ td {
     display: grid;
   }
 }
+
+/* ---- v23 YAML-first setup and operation target selector ---------------- */
+.operation-target-panel {
+  margin-bottom: 8px;
+  padding: 10px 12px;
+}
+
+.operation-target-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.operation-target-head h2 {
+  margin: 0 0 3px;
+  font-size: 15px;
+}
+
+.operation-target-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(220px, 0.8fr) minmax(320px, 1.4fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.operation-target-panel .sat-display-panel {
+  position: static;
+  width: auto;
+  max-height: 112px;
+  overflow: auto;
+  box-shadow: none;
+  background: rgba(15, 23, 42, 0.44);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.operation-target-panel .sat-check-list {
+  max-height: 70px;
+  overflow: auto;
+}
+
+.settings-modal-window .mission-setup-grid {
+  grid-template-columns: minmax(360px, 1.1fr) minmax(300px, 0.8fr);
+}
+
+@media (max-width: 900px) {
+  .operation-target-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .operation-target-head {
+    flex-direction: column;
+  }
+
+  .settings-modal-window .mission-setup-grid {
+    grid-template-columns: 1fr;
+  }
+}

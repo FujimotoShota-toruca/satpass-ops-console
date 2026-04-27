@@ -1,4 +1,4 @@
-# SatPass Ops Console 設定例 v13
+# SatPass Ops Console 設定例 v23
 settings:
   input_root: ./
   output_root: ../output
@@ -28,19 +28,10 @@ satellites:
       1 25544U 98067A   26001.50000000  .00010000  00000+0  18000-3 0  9990
       2 25544  51.6400 120.0000 0006000  20.0000 340.0000 15.50000000000000
 
-# TLE取得元。name@url形式。Fetch TLE URLsで取得・更新します。
-tle_sources: |
-  OBJECT A@https://celestrak.org/NORAD/elements/gp.php?CATNR=68792&FORMAT=TLE
-  OBJECT B@https://celestrak.org/NORAD/elements/gp.php?CATNR=68793&FORMAT=TLE
-  OBJECT C@https://celestrak.org/NORAD/elements/gp.php?CATNR=68794&FORMAT=TLE
-  OBJECT D@https://celestrak.org/NORAD/elements/gp.php?CATNR=68795&FORMAT=TLE
-  OBJECT E@https://celestrak.org/NORAD/elements/gp.php?CATNR=68796&FORMAT=TLE
-  OBJECT F@https://celestrak.org/NORAD/elements/gp.php?CATNR=68797&FORMAT=TLE
-  OBJECT G@https://celestrak.org/NORAD/elements/gp.php?CATNR=68798&FORMAT=TLE
-  OBJECT H@https://celestrak.org/NORAD/elements/gp.php?CATNR=68799&FORMAT=TLE
-  ELECTRON R/B@https://celestrak.org/NORAD/elements/gp.php?CATNR=68800&FORMAT=TLE
-  ELECTRON KICK STAGE R/B@https://celestrak.org/NORAD/elements/gp.php?CATNR=68801&FORMAT=TLE
-  RAISE-4@https://celestrak.org/NORAD/elements/gp.php?CATNR=67073&FORMAT=TLE
+# TLE取得元。name@url形式。Fetch YAML URLs / Add & Fetch で取得・更新します。
+# YAML一発設定でTLE URLを使う場合は、必要に応じて下記のコメントを外してください。
+# tle_sources: |
+#   ISS (ZARYA)@https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=TLE
 
 app:
   title: SatPass Ops Console

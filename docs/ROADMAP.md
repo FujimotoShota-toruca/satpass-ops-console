@@ -158,3 +158,20 @@
 - 設定系UIをモーダルウィンドウに集約。
 - 運用画面からTLE追加/YAML編集/表示設定を分離し、常時表示領域を削減。
 - 今後の候補: 設定モーダル内のタブ化（TLE / Target / YAML / Display / Privacy）。
+
+
+## v0.23.0
+
+- KAKUSHIN専用のURL追加ボタンを削除し、一般用途向けのYAML-first UIへ整理。
+- デフォルト構成はISSのみを対象に維持。
+- 追尾衛星・地上局・表示衛星の切替を運用画面の `Tracking / Display` に移動。
+- YAML一括設定と必要時のTLE追加は `YAML Setup / Add Satellite` モーダルに集約。
+- ルートの `OperationalPreparationProcedures.md` に、一般手順とKAKUSHIN RISING URLセットアップ例を追記。
+
+
+## v0.24.0
+
+- OperationalPreparationProcedures.md を、TLE本文を含む最小YAML構成前提に修正。
+- `YamlSpecification.md` / `docs/YAML_SPEC.md` を追加。
+- `config/minimal_iss_operation.yaml` と `config/kakushin_rising_url_operation.yaml` を追加。
+- Quick Satellite Addの位置づけを、YAML一括設定を補完する衛星追加補助機能として明確化。
