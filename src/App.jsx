@@ -10,6 +10,7 @@ const DEG2RAD = Math.PI / 180;
 const RAD2DEG = 180 / Math.PI;
 const C_MPS = 299_792_458;
 const EARTH_OMEGA_RAD_S = 7.2921150e-5;
+const DEFAULT_DEF_FREQUENCY_OFFSET_HZ = 2_158_000_000;
 
 const DEFAULT_MAP_URL = "https://commons.wikimedia.org/wiki/Special:Redirect/file/Equirectangular-projection.jpg?width=2048";
 const DEFAULT_MAP_ATTRIBUTION = "Wikimedia Commons: Equirectangular-projection.jpg / NASA imagery derivative";
@@ -164,6 +165,13 @@ function normalizeOps(raw = {}) {
     commandElevationDeg: safeNumber(
       raw.command_elevation_deg ?? raw.commandElevationDeg ?? raw.command_aos_los_elevation_deg ?? raw.commandAosLosElevationDeg,
       safeNumber(raw.min_elevation_deg ?? raw.minElevationDeg, 0)
+    ),
+    // DEFファイルの第2列は、添付例のリバースエンジニアリング上、
+    // downlink補正周波数[Hz]からこの値を引いたIF相当値を整数丸めしたもの。
+    // 例: 2228051781.795 - 2158000000 = 70051781.795 -> 70051782
+    defFrequencyOffsetHz: safeNumber(
+      raw.def_frequency_offset_hz ?? raw.defFrequencyOffsetHz ?? raw.def_local_oscillator_hz ?? raw.defLocalOscillatorHz ?? raw.downlink_def_frequency_offset_hz ?? raw.downlinkDefFrequencyOffsetHz,
+      DEFAULT_DEF_FREQUENCY_OFFSET_HZ
     ),
   };
 }
@@ -487,6 +495,7 @@ function exportableConfig(appConfig, opsConfig, mapConfig, radarConfig, orbitTra
     downlink_base_frequency_hz: opsConfig.downlinkBaseFrequencyHz,
     min_elevation_deg: station?.minElevationDeg ?? opsConfig.minElevationDeg,
     command_elevation_deg: opsConfig.commandElevationDeg,
+    def_frequency_offset_hz: opsConfig.defFrequencyOffsetHz ?? DEFAULT_DEF_FREQUENCY_OFFSET_HZ,
     ground_station: {
       name: station?.name || "Ground Station",
       latitude_deg: station?.latDeg ?? 0,
@@ -568,9 +577,12 @@ settings:
   command_elevation_deg: 5.0
 
 # ドップラー設定 [Hz]
+# def_frequency_offset_hz はDEF第2列を作るときに downlink補正周波数から差し引く値です。
+# 添付DEF例では 2228051781.795 - 2158000000 = 70051782 という変換になっています。
 doppler:
   uplink_base_frequency_hz: 2036250000
   downlink_base_frequency_hz: 2201000000
+  def_frequency_offset_hz: 2158000000
 
 # 地上局情報。複数局に対応。
 ground_stations:
@@ -669,6 +681,7 @@ function mergeConfigFragments(fragments) {
     for (const key of [
       "input_root", "output_root", "observation_date", "folder_name", "timezone",
       "uplink_base_frequency_hz", "downlink_base_frequency_hz", "min_elevation_deg",
+      "command_elevation_deg", "def_frequency_offset_hz", "def_local_oscillator_hz",
     ]) {
       if (Object.prototype.hasOwnProperty.call(fragment, key)) merged[key] = fragment[key];
     }
@@ -1433,6 +1446,17 @@ function sanitizePathPart(text) {
   return safeString(text, "output").replace(/[\\/:*?"<>|\s]+/g, "_").replace(/^_+|_+$/g, "") || "output";
 }
 
+function compactDecimal(value, digits = 6) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "0";
+  return String(Number(n.toFixed(digits)));
+}
+
+function formatDefHmsInZone(date, timeZone) {
+  const p = getZonedParts(date, timeZone);
+  return `${Number(p.hour)}:${pad2(p.minute)}:${pad2(p.second)}`;
+}
+
 function frequencyRowsForPass(pass, ops) {
   const tz = ops.timezone || "Asia/Tokyo";
   const uplink = [];
@@ -1448,6 +1472,21 @@ function frequencyRowsForPass(pass, ops) {
     downlink.push(`${t},${fDown.toFixed(3)},${common}`);
   }
   return { uplink: `${uplink.join("\n")}\n`, downlink: `${downlink.join("\n")}\n` };
+}
+
+function defRowsForPass(pass, ops) {
+  const tz = ops.timezone || "Asia/Tokyo";
+  const frequencyOffsetHz = safeNumber(ops.defFrequencyOffsetHz, DEFAULT_DEF_FREQUENCY_OFFSET_HZ);
+  const lines = [];
+  for (const row of pass.rows) {
+    const vr = row.obs.rangeRateMps;
+    const ratio = 1 - vr / C_MPS;
+    const fDown = ops.downlinkBaseFrequencyHz * ratio;
+    const defFrequency = Math.round(fDown - frequencyOffsetHz);
+    const t = formatDefHmsInZone(row.date, tz);
+    lines.push(`${t},${defFrequency},${compactDecimal(row.obs.azDeg)},${compactDecimal(row.obs.elDeg)}`);
+  }
+  return `${lines.join("\r\n")}\r\n`;
 }
 
 async function buildDopplerZip({ appConfig, opsConfig, mapConfig, radarConfig, orbitTrackConfig, sat, station, observationDateOverride = null }) {
@@ -1466,7 +1505,7 @@ async function buildDopplerZip({ appConfig, opsConfig, mapConfig, radarConfig, o
   root.file("config_used.yaml", dumpYaml(config));
 
   const manifestLines = [
-    "SatPass Ops Console - Doppler CSV Export",
+    "SatPass Ops Console - Doppler CSV/DEF Export",
     `generated_at_utc: ${new Date().toISOString()}`,
     `observation_date: ${exportOpsConfig.observationDate}`,
     `timezone: ${tz}`,
@@ -1475,8 +1514,11 @@ async function buildDopplerZip({ appConfig, opsConfig, mapConfig, radarConfig, o
     `min_elevation_deg: ${station.minElevationDeg}`,
     `uplink_base_frequency_hz: ${exportOpsConfig.uplinkBaseFrequencyHz}`,
     `downlink_base_frequency_hz: ${exportOpsConfig.downlinkBaseFrequencyHz}`,
+    `def_frequency_offset_hz: ${safeNumber(exportOpsConfig.defFrequencyOffsetHz, DEFAULT_DEF_FREQUENCY_OFFSET_HZ)}`,
     `pass_count: ${passes.length}`,
     "csv_format: [時刻],[周波数(ドップラー補正済みHz)],[方位角deg],[仰角deg]",
+    "def_format: [H:MM:SS],[round(downlink_doppler_frequency_hz - def_frequency_offset_hz)],[方位角deg],[仰角deg]",
+    "def_source: generated from downlink Doppler rows; filename uses AOS-LOS compact local time",
     "doppler_sign: range_rate > 0 means receding; downlink=f0*(1-vr/c), uplink=f0/(1-vr/c)",
     "range_rate_method: topocentric_position_velocity_projection; aligned with tle_pass_csv_exporter.py",
     "",
@@ -1491,16 +1533,20 @@ async function buildDopplerZip({ appConfig, opsConfig, mapConfig, radarConfig, o
     const passKey = `${satName}_${ymd}_AOS${aos}`;
     const csv = frequencyRowsForPass(pass, exportOpsConfig);
 
+    const defName = `dop_${ymd}_${aos}-${los}.def`;
+    const def = defRowsForPass(pass, exportOpsConfig);
+
     root.file(`${passKey}_uplink.csv`, csv.uplink);
     root.file(`${passKey}_downlink.csv`, csv.downlink);
+    root.file(defName, def);
 
     manifestLines.push(`pass_${idx}: AOS=${formatIsoInZone(pass.aos, tz)}, MAX=${formatIsoInZone(pass.maxElTime, tz)} (${pass.maxElDeg.toFixed(2)} deg), LOS=${formatIsoInZone(pass.los, tz)}, min_range=${pass.minRangeKm.toFixed(1)} km`);
-    manifestLines.push(`  files: ${passKey}_uplink.csv, ${passKey}_downlink.csv`);
+    manifestLines.push(`  files: ${passKey}_uplink.csv, ${passKey}_downlink.csv, ${defName}`);
     manifestLines.push(`  legacy_pass_name: pass_${idx}_AOS_${aos}_MAX_${max}_LOS_${los}`);
   });
 
   root.file("manifest.txt", `${manifestLines.join("\n")}\n`);
-  return { blob: await zip.generateAsync({ type: "blob" }), filename: `${rootName}_doppler_csv.zip`, passCount: passes.length };
+  return { blob: await zip.generateAsync({ type: "blob" }), filename: `${rootName}_doppler_csv_def.zip`, passCount: passes.length };
 }
 
 
@@ -1901,7 +1947,7 @@ function DopplerOutputPanel({ csvDate, onCsvDateChange, onExportZip, exporting, 
   return (
     <section className="doppler-output-strip" aria-label="Doppler CSV output controls">
       <div className="doppler-output-heading">
-        <span className="seven-label doppler-output-kicker">DOPPLER CSV OUTPUT</span>
+        <span className="seven-label doppler-output-kicker">DOPPLER CSV / DEF OUTPUT</span>
         <div className="doppler-target-chips" aria-label="Doppler output target">
           <span className="doppler-chip"><span>Satellite</span><strong>{selectedSat?.name ?? "--"}</strong></span>
           <span className="doppler-chip"><span>Ground Station</span><strong>{selectedStation?.name ?? "--"}</strong></span>
@@ -1913,7 +1959,7 @@ function DopplerOutputPanel({ csvDate, onCsvDateChange, onExportZip, exporting, 
           <input type="date" value={csvDate} onChange={(e) => onCsvDateChange?.(e.target.value)} />
         </label>
         <button className="button compact primary export-main-button doppler-export-button" onClick={onExportZip} disabled={exporting}>
-          {exporting ? "Exporting..." : "Export Doppler CSV ZIP"}
+          {exporting ? "Exporting..." : "Export Doppler CSV/DEF ZIP"}
         </button>
       </div>
     </section>
@@ -2144,6 +2190,7 @@ function OperationTargetPanel({
   onToggleVisibleSatellite,
   onSetAllVisible,
   onOpenSetup,
+  onCopySelectedTle,
 }) {
   return (
     <section className="panel operation-target-panel">
@@ -2152,7 +2199,10 @@ function OperationTargetPanel({
           <h2>Tracking / Display</h2>
           <p className="muted small">運用中に頻繁に触る追尾衛星・地上局・地図表示衛星だけをここで切り替えます。設定の正本はYAMLです。</p>
         </div>
-        <button className="button compact setup-button" onClick={onOpenSetup}>YAML Setup / TLE Fetch</button>
+        <div className="operation-target-actions">
+          <button className="button compact" type="button" onClick={onCopySelectedTle} disabled={!selectedSat}>Copy selected TLE</button>
+          <button className="button compact setup-button" onClick={onOpenSetup}>YAML Setup / TLE Fetch</button>
+        </div>
       </div>
       <div className="operation-target-grid">
         <label>
@@ -2466,7 +2516,7 @@ function App() {
   const [selectedOperationPassKeys, setSelectedOperationPassKeys] = useState([]);
   const [operationPassRegistry, setOperationPassRegistry] = useState({});
   const [skylineProfile, setSkylineProfile] = useState(null);
-  const [passWindowMode, setPassWindowMode] = useState("24");
+  const [passWindowMode, setPassWindowMode] = useState("1day");
   const [passDate, setPassDate] = useState(() => formatYmdInZone(new Date(), initialConfig.ops.timezone || "Asia/Tokyo"));
   const [csvDate, setCsvDate] = useState(() => formatYmdInZone(new Date(), initialConfig.ops.timezone || "Asia/Tokyo"));
 
@@ -2997,10 +3047,22 @@ function App() {
     }
   }
 
+  async function copySelectedTleText() {
+    if (!selectedSat) return;
+    const text = tleBlockFromSatellite(selectedSat);
+    try {
+      await navigator.clipboard.writeText(text);
+      setConfigMessage(`${selectedSat.name} のTLEテキストをクリップボードにコピーしました。`);
+    } catch {
+      downloadText(`${sanitizePathPart(selectedSat.name)}_tle.txt`, text, "text/plain");
+      setConfigMessage("クリップボード書き込みに失敗したため、TLEテキストをファイル出力しました。");
+    }
+  }
+
   async function exportPassCsvZip() {
     if (!selectedSat || !selectedStation) return;
     setExporting(true);
-    setConfigMessage("パス別 Doppler CSV ZIP を生成中です。1秒刻みなので数秒かかる場合があります。");
+    setConfigMessage("パス別 Doppler CSV/DEF ZIP を生成中です。1秒刻みなので数秒かかる場合があります。");
     try {
       const { blob, filename, passCount } = await buildDopplerZip({ appConfig, opsConfig, mapConfig, radarConfig, orbitTrackConfig, sat: selectedSat, station: selectedStation, observationDateOverride: csvDate });
       const url = URL.createObjectURL(blob);
@@ -3009,9 +3071,9 @@ function App() {
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
-      setConfigMessage(`Doppler CSV ZIP を出力しました。date=${csvDate}, pass_count=${passCount}`);
+      setConfigMessage(`Doppler CSV/DEF ZIP を出力しました。date=${csvDate}, pass_count=${passCount}`);
     } catch (error) {
-      setConfigMessage(`Doppler CSV ZIP の生成に失敗しました: ${error.message}`);
+      setConfigMessage(`Doppler CSV/DEF ZIP の生成に失敗しました: ${error.message}`);
     } finally {
       setExporting(false);
     }
@@ -3167,6 +3229,7 @@ function App() {
         onToggleVisibleSatellite={toggleVisibleSatellite}
         onSetAllVisible={setAllSatellitesVisible}
         onOpenSetup={() => setSettingsOpen(true)}
+        onCopySelectedTle={copySelectedTleText}
       />
 
       <section className="ops-data-row">

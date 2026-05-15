@@ -94,6 +94,7 @@ doppler:
 |---|---:|---|
 | `uplink_base_frequency_hz` | Hz | アップリンク基準周波数 |
 | `downlink_base_frequency_hz` | Hz | ダウンリンク基準周波数 |
+| `def_frequency_offset_hz` | Hz | DEF第2列を作るときに downlink補正周波数から差し引く値 |
 
 注意：`145.000` は145 MHzではなく145 Hzです。145 MHzなら `145000000` と書きます。
 

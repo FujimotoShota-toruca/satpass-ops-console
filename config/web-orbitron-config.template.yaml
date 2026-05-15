@@ -12,6 +12,8 @@ settings:
 doppler:
   uplink_base_frequency_hz: 2036250000
   downlink_base_frequency_hz: 2201000000
+  # DEF第2列 = round(downlink補正周波数 - def_frequency_offset_hz)
+  def_frequency_offset_hz: 2158000000
 
 ground_stations:
   - id: utsunomiya

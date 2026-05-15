@@ -2089,6 +2089,13 @@ td {
   font-size: 15px;
 }
 
+.operation-target-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .operation-target-grid {
   display: grid;
   grid-template-columns: minmax(220px, 0.8fr) minmax(220px, 0.8fr) minmax(320px, 1.4fr);
