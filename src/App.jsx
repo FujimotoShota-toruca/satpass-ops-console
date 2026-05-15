@@ -138,6 +138,30 @@ function tleBlockFromSatellite(sat) {
   return `${name}\n${sat?.line1 || ""}\n${sat?.line2 || ""}`;
 }
 
+function tleRevolutionNumberLabel(sat) {
+  const line2 = safeString(sat?.line2).trim();
+
+  // TLE line 2 の末尾は「5桁の周回数 + 1桁のチェックサム」になりやすい。
+  // したがって、末尾6桁をまとめて読むのではなく、次の優先順位でチェックサムを除外する。
+  //   1. 標準TLEの固定桁: columns 64-68 = revolution number at epoch
+  //      JS slice は 0-based/end-exclusive なので [63, 68)。column 69 の checksum は含まない。
+  //   2. 固定桁が崩れている場合のみ、末尾の checksum らしき1桁を分離して直前5桁を読む。
+  const fixedColumnRev = line2.length >= 68 ? line2.slice(63, 68).trim() : "";
+  if (/^\d{1,5}$/.test(fixedColumnRev)) {
+    return `rev${sanitizePathPart(fixedColumnRev)}`;
+  }
+
+  // 例: `... 15.09295256243991` の末尾 `243991` は rev=24399, checksum=1。
+  const checksumSeparatedRev = line2.match(/(\d{1,5})(\d)$/)?.[1] ?? "";
+  if (checksumSeparatedRev) {
+    return `rev${sanitizePathPart(checksumSeparatedRev)}`;
+  }
+
+  // checksum が無い/省略されたTLE相当のフォールバック。
+  const noChecksumRev = line2.match(/(\d{1,5})\s*$/)?.[1] ?? "";
+  return noChecksumRev ? `rev${sanitizePathPart(noChecksumRev)}` : "revNA";
+}
+
 function normalizeApp(rawApp = {}) {
   const rawTitle = safeString(rawApp.title, "SatPass Ops Console");
   const title = rawTitle === "Web Orbitron MVP" ? "SatPass Ops Console" : rawTitle;
@@ -495,7 +519,6 @@ function exportableConfig(appConfig, opsConfig, mapConfig, radarConfig, orbitTra
     downlink_base_frequency_hz: opsConfig.downlinkBaseFrequencyHz,
     min_elevation_deg: station?.minElevationDeg ?? opsConfig.minElevationDeg,
     command_elevation_deg: opsConfig.commandElevationDeg,
-    def_frequency_offset_hz: opsConfig.defFrequencyOffsetHz ?? DEFAULT_DEF_FREQUENCY_OFFSET_HZ,
     ground_station: {
       name: station?.name || "Ground Station",
       latitude_deg: station?.latDeg ?? 0,
@@ -561,7 +584,7 @@ function dumpYaml(config) {
 }
 
 function buildTemplateYaml() {
-  return `# SatPass Ops Console 設定例 v29
+  return `# SatPass Ops Console 設定例 v30
 # 1ファイル運用も、分割YAML運用も可能です。
 # 分割する場合は、ground_stations.yaml / satellites.yaml / doppler.yaml / settings.yaml / map.yaml / radar.yaml / orbit_track.yaml を
 # Import YAML(s)/JSON で複数選択してください。
@@ -577,12 +600,11 @@ settings:
   command_elevation_deg: 5.0
 
 # ドップラー設定 [Hz]
-# def_frequency_offset_hz はDEF第2列を作るときに downlink補正周波数から差し引く値です。
-# 添付DEF例では 2228051781.795 - 2158000000 = 70051782 という変換になっています。
+# 通常は uplink/downlink の基準周波数だけ指定します。
+# DEF第2列の内部オフセットは標準値 2158000000 Hz を自動使用します。
 doppler:
   uplink_base_frequency_hz: 2036250000
   downlink_base_frequency_hz: 2201000000
-  def_frequency_offset_hz: 2158000000
 
 # 地上局情報。複数局に対応。
 ground_stations:
@@ -1496,7 +1518,8 @@ async function buildDopplerZip({ appConfig, opsConfig, mapConfig, radarConfig, o
   const tz = exportOpsConfig.timezone || "Asia/Tokyo";
   const dayStart = parseObservationStartUtc(exportOpsConfig.observationDate, tz);
   const ymd = formatCompactDateInZone(dayStart, tz);
-  const rootName = `${ymd}_${sanitizePathPart(exportOpsConfig.folderName)}`;
+  const revLabel = tleRevolutionNumberLabel(sat);
+  const rootName = `${ymd}_${sanitizePathPart(exportOpsConfig.folderName)}_${revLabel}`;
   const root = zip.folder(rootName);
 
   if (!root) throw new Error("ZIP フォルダの作成に失敗しました。");
@@ -1510,6 +1533,7 @@ async function buildDopplerZip({ appConfig, opsConfig, mapConfig, radarConfig, o
     `observation_date: ${exportOpsConfig.observationDate}`,
     `timezone: ${tz}`,
     `satellite: ${sat.name}`,
+    `tle_revolution_number_at_epoch: ${revLabel}`,
     `ground_station: ${station.name}`,
     `min_elevation_deg: ${station.minElevationDeg}`,
     `uplink_base_frequency_hz: ${exportOpsConfig.uplinkBaseFrequencyHz}`,
@@ -2191,6 +2215,10 @@ function OperationTargetPanel({
   onSetAllVisible,
   onOpenSetup,
   onCopySelectedTle,
+  onFetchTleSources,
+  tleSourceCount = 0,
+  exporting = false,
+  tleFetchStatus = null,
 }) {
   return (
     <section className="panel operation-target-panel">
@@ -2201,6 +2229,15 @@ function OperationTargetPanel({
         </div>
         <div className="operation-target-actions">
           <button className="button compact" type="button" onClick={onCopySelectedTle} disabled={!selectedSat}>Copy selected TLE</button>
+          <button
+            className="button compact fetch-button"
+            type="button"
+            onClick={onFetchTleSources}
+            disabled={exporting || !tleSourceCount || tleFetchStatus?.state === "fetching"}
+            title={tleSourceCount ? "Fetch configured TLE URL sources" : "No TLE URL sources configured"}
+          >
+            Fetch URL TLEs
+          </button>
           <button className="button compact setup-button" onClick={onOpenSetup}>YAML Setup / TLE Fetch</button>
         </div>
       </div>
@@ -3230,6 +3267,10 @@ function App() {
         onSetAllVisible={setAllSatellitesVisible}
         onOpenSetup={() => setSettingsOpen(true)}
         onCopySelectedTle={copySelectedTleText}
+        onFetchTleSources={fetchTleSources}
+        tleSourceCount={tleSources.length}
+        exporting={exporting}
+        tleFetchStatus={tleFetchStatus}
       />
 
       <section className="ops-data-row">

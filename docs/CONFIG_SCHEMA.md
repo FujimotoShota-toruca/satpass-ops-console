@@ -20,7 +20,6 @@ settings:
 doppler:
   uplink_base_frequency_hz: 2036250000
   downlink_base_frequency_hz: 2201000000
-  def_frequency_offset_hz: 2158000000
 
 ground_stations:
   - id: utsunomiya
@@ -158,7 +157,7 @@ satellites:
 |---|---:|---|
 | `uplink_base_frequency_hz` | Hz | アップリンク基準周波数 |
 | `downlink_base_frequency_hz` | Hz | ダウンリンク基準周波数 |
-| `def_frequency_offset_hz` | Hz | DEF第2列を作るときに downlink補正周波数から差し引く値 |
+| `def_frequency_offset_hz` | Hz | 任意。通常は省略し、DEF第2列の内部オフセットは標準値 `2158000000` を使用 |
 
 現状は全衛星共通です。衛星別周波数が必要な場合は、次の拡張候補です。
 

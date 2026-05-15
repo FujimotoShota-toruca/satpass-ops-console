@@ -1,4 +1,4 @@
-# SatPass Ops Console 設定例 v29
+# SatPass Ops Console 設定例 v30
 settings:
   input_root: ./
   output_root: ../output
@@ -12,8 +12,6 @@ settings:
 doppler:
   uplink_base_frequency_hz: 2036250000
   downlink_base_frequency_hz: 2201000000
-  # DEF第2列 = round(downlink補正周波数 - def_frequency_offset_hz)
-  def_frequency_offset_hz: 2158000000
 
 ground_stations:
   - id: utsunomiya

@@ -219,6 +219,6 @@
 ### v0.29.0
 
 - 通常AOS/LOSタイマーとCommand AOS/LOSタイマーを別カード表示に変更。
-- `Visible Passes` のデフォルト予測範囲を `24h` に変更。
+- `Visible Passes` のデフォルト予測範囲を `1Day` に変更。
 - 最小YAML構成に `command_elevation_deg` を含める方針を明記。
 - 地上局緯度・経度で10進数degに加え、度/分/秒（DMS）形式に対応。
