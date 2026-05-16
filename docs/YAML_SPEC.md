@@ -54,6 +54,7 @@ satellites:
 | `radar` | object | レーダーチャート背景画像等 | 任意 |
 | `orbit_track` | object | 軌道線の日照色分け等 | 任意 |
 | `app` | object | 更新周期、予測範囲など | 任意 |
+| `exports` | object | Doppler CSV / DEF 等の出力形式設定 | 任意 |
 
 ---
 
@@ -94,13 +95,52 @@ doppler:
 |---|---:|---|
 | `uplink_base_frequency_hz` | Hz | アップリンク基準周波数 |
 | `downlink_base_frequency_hz` | Hz | ダウンリンク基準周波数 |
-| `def_frequency_offset_hz` | Hz | 任意。通常は省略。DEF第2列の内部オフセットを標準値から変更する場合だけ指定 |
 
 注意：`145.000` は145 MHzではなく145 Hzです。145 MHzなら `145000000` と書きます。
 
 ---
 
-## 5. `ground_stations`
+## 5. `exports`
+
+`.def` は地上局・受信機固有の派生出力として扱います。Git管理する標準YAMLでは無効にし、必要な運用PCだけ `config/local.yaml` などで有効化してください。
+
+```yaml
+local_setup:
+  exports:
+    doppler_csv:
+      enabled: true
+    doppler_def:
+      enabled: true
+      source: downlink
+      transform: downlink_minus_base_plus_if
+      if_frequency_hz: 70000000
+      rounding: round
+```
+
+`.def` 第2列の標準式は以下です。
+
+```text
+integerize(downlink Doppler補正後周波数) - downlink基準周波数 + if_frequency_hz
+```
+
+`integerize()` は `rounding` で選択します。
+
+| 値 | 意味 |
+|---|---|
+| `round` | 四捨五入 |
+| `floor` | 切り捨て |
+
+例として、downlink基準周波数 `2228000000 Hz`、IF `70000000 Hz`、Doppler補正後downlink周波数 `2228050636.682 Hz`、`rounding: round` の場合は次になります。
+
+```text
+round(2228050636.682) - 2228000000 + 70000000 = 70050637
+```
+
+公開デフォルトでは `doppler_def.enabled: false` です。詳細は `docs/DOPPLER_EXPORT.md` を参照してください。
+
+---
+
+## 6. `ground_stations`
 
 ```yaml
 ground_stations:

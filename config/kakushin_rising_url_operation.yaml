@@ -31,3 +31,8 @@ tle_sources: |
   ELECTRON R/B@https://celestrak.org/NORAD/elements/gp.php?CATNR=68800&FORMAT=TLE
   ELECTRON KICK STAGE R/B@https://celestrak.org/NORAD/elements/gp.php?CATNR=68801&FORMAT=TLE
   RAISE-4@https://celestrak.org/NORAD/elements/gp.php?CATNR=67073&FORMAT=TLE
+
+exports:
+  doppler_csv:
+    enabled: true
+  # doppler_def は config/local.yaml 等の local_setup で必要時のみ enabled: true にします。

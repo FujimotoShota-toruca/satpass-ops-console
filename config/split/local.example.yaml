@@ -1,0 +1,18 @@
+# SatPass Ops Console ローカル設定例
+# このファイルを config/local.yaml としてコピーし、実運用PC・地上局固有の設定だけを書きます。
+# config/local.yaml は .gitignore 対象です。
+
+local_setup:
+  exports:
+    doppler_csv:
+      enabled: true
+    doppler_def:
+      # 公開デフォルトでは false。必要な地上局だけ true にします。
+      enabled: true
+      # 通常は downlink。将来uplink派生DEFが必要な場合のみ uplink にします。
+      source: downlink
+      # DEF第2列 = integerize(downlink Doppler補正後周波数) - downlink基準周波数 + IF周波数
+      transform: downlink_minus_base_plus_if
+      if_frequency_hz: 70000000
+      # round: 四捨五入 / floor: 切り捨て
+      rounding: round

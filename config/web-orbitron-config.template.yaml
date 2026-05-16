@@ -1,69 +1,84 @@
-# SatPass Ops Console 設定例 v30
-settings:
-  input_root: ./
-  output_root: ../output
-  observation_date: 2026-04-25
-  folder_name: test_ops
-  timezone: Asia/Tokyo
-  min_elevation_deg: 0.0
-  # コマンドAOS/LOSに使う仰角 [deg]
-  command_elevation_deg: 5.0
+# SatPass Ops Console 設定例 v31
+# global_setup: Git管理して共有する汎用設定
+# local_setup : 地上局・PC・受信機固有のローカル設定。通常は config/local.yaml に分離し、Git管理しません。
+# 公開デフォルトでは .def を出力しません。
 
-doppler:
-  uplink_base_frequency_hz: 2036250000
-  downlink_base_frequency_hz: 2201000000
-
-ground_stations:
-  - id: utsunomiya
-    name: Utsunomiya GS
-    latitude_deg: 36.5551
-    longitude_deg: 139.8828
-    altitude_m: 120.0
+global_setup:
+  settings:
+    input_root: ./
+    output_root: ../output
+    observation_date: 2026-04-25
+    folder_name: test_ops
+    timezone: Asia/Tokyo
     min_elevation_deg: 0.0
+    # コマンドAOS/LOSに使う仰角 [deg]
+    command_elevation_deg: 5.0
 
-satellites:
-  - id: iss
-    name: ISS (ZARYA)
-    color: "#22c55e"
-    tle: |
-      ISS (ZARYA)
-      1 25544U 98067A   26001.50000000  .00010000  00000+0  18000-3 0  9990
-      2 25544  51.6400 120.0000 0006000  20.0000 340.0000 15.50000000000000
+  doppler:
+    uplink_base_frequency_hz: 2036250000
+    downlink_base_frequency_hz: 2201000000
 
-# TLE取得元。name@url形式。Fetch YAML URLs / Add & Fetch で取得・更新します。
-# YAML一発設定でTLE URLを使う場合は、必要に応じて下記のコメントを外してください。
-# tle_sources: |
-#   ISS (ZARYA)@https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=TLE
+  ground_stations:
+    - id: utsunomiya
+      name: Utsunomiya GS
+      latitude_deg: 36.5551
+      longitude_deg: 139.8828
+      altitude_m: 120.0
+      min_elevation_deg: 0.0
 
-app:
-  title: SatPass Ops Console
-  refresh_sec: 1
-  prediction_horizon_hours: 12
-  prediction_step_sec: 30
-  track_minutes_before: 45
-  track_minutes_after: 90
-  track_step_sec: 60
+  satellites:
+    - id: iss
+      name: ISS (ZARYA)
+      color: "#22c55e"
+      tle: |
+        ISS (ZARYA)
+        1 25544U 98067A   26001.50000000  .00010000  00000+0  18000-3 0  9990
+        2 25544  51.6400 120.0000 0006000  20.0000 340.0000 15.50000000000000
 
-map:
-  projection: equirectangular
-  background_image_url: "https://commons.wikimedia.org/wiki/Special:Redirect/file/Equirectangular-projection.jpg?width=2048"
-  background_opacity: 0.78
-  attribution: Wikimedia Commons Equirectangular projection / NASA imagery derivative
-  show_synthetic_land: false
-  show_grid: true
+  # TLE取得元。name@url形式。Fetch URL TLEs で取得・更新します。
+  # tle_sources: |
+  #   ISS (ZARYA)@https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=TLE
 
-radar:
-  # 地上局から見たスカイライン画像を入れる場合に指定。
-  # 正方形画像を推奨。空文字の場合は従来のレーダー背景のみ。
-  background_image_url: ""
-  background_opacity: 0.45
-  attribution: ""
+  app:
+    title: SatPass Ops Console
+    refresh_sec: 1
+    prediction_horizon_hours: 12
+    prediction_step_sec: 30
+    track_minutes_before: 45
+    track_minutes_after: 90
+    track_step_sec: 60
 
-orbit_track:
-  # sunlight: 軌道上の日照状態で色分け / satellite: 衛星ごとの色で表示
-  color_mode: sunlight
-  sunlit_color: "#22c55e"
-  penumbra_color: "#f59e0b"
-  umbra_color: "#7c3aed"
-  default_color: satellite
-  show_eclipse_label: true
+  map:
+    projection: equirectangular
+    background_image_url: "https://commons.wikimedia.org/wiki/Special:Redirect/file/Equirectangular-projection.jpg?width=2048"
+    background_opacity: 0.78
+    attribution: Wikimedia Commons Equirectangular projection / NASA imagery derivative
+    show_synthetic_land: false
+    show_grid: true
+
+  radar:
+    background_image_url: ""
+    background_opacity: 0.45
+    attribution: ""
+
+  orbit_track:
+    color_mode: sunlight
+    sunlit_color: "#22c55e"
+    penumbra_color: "#f59e0b"
+    umbra_color: "#7c3aed"
+    default_color: satellite
+    show_eclipse_label: true
+
+local_setup:
+  exports:
+    doppler_csv:
+      enabled: true
+    # .def はローカル運用固有の派生形式なので、公開デフォルトでは無効。
+    # 必要な地上局だけ config/local.yaml 等で enabled: true にしてください。
+    doppler_def:
+      enabled: false
+      source: downlink
+      transform: downlink_minus_base_plus_if
+      if_frequency_hz: 70000000
+      # round: 四捨五入 / floor: 切り捨て
+      rounding: round

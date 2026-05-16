@@ -4,12 +4,13 @@
 
 # Configuration Schema
 
-SatPass Ops Console v8 は、従来の単一YAML形式と、分割YAML形式の両方を受け付けます。
+SatPass Ops Console は、従来の単一YAML形式、分割YAML形式、`global_setup` / `local_setup` 形式を受け付けます。`global_setup` はGit管理する汎用設定、`local_setup` は地上局・受信機・PC固有設定です。
 
 ## 推奨: 分割しやすい統合YAML
 
 ```yaml
-settings:
+global_setup:
+  settings:
   input_root: ./
   output_root: ../output
   observation_date: 2026-04-25
@@ -17,12 +18,12 @@ settings:
   timezone: Asia/Tokyo
   min_elevation_deg: 0.0
 
-doppler:
-  uplink_base_frequency_hz: 2036250000
-  downlink_base_frequency_hz: 2201000000
+  doppler:
+    uplink_base_frequency_hz: 2036250000
+    downlink_base_frequency_hz: 2201000000
 
-ground_stations:
-  - id: utsunomiya
+  ground_stations:
+    - id: utsunomiya
     name: Utsunomiya GS
     latitude_deg: 36.5551
     longitude_deg: 139.8828
@@ -157,7 +158,34 @@ satellites:
 |---|---:|---|
 | `uplink_base_frequency_hz` | Hz | アップリンク基準周波数 |
 | `downlink_base_frequency_hz` | Hz | ダウンリンク基準周波数 |
-| `def_frequency_offset_hz` | Hz | 任意。通常は省略し、DEF第2列の内部オフセットは標準値 `2158000000` を使用 |
+
+## exports
+
+`.def` はローカル運用固有の派生形式として扱います。公開デフォルトでは無効です。
+
+```yaml
+local_setup:
+  exports:
+    doppler_csv:
+      enabled: true
+    doppler_def:
+      enabled: true
+      source: downlink
+      transform: downlink_minus_base_plus_if
+      if_frequency_hz: 70000000
+      rounding: round
+```
+
+| key | unit/type | description |
+|---|---:|---|
+| `exports.doppler_csv.enabled` | boolean | Doppler CSV出力の有無。通常は `true` |
+| `exports.doppler_def.enabled` | boolean | `.def` 出力の有無。公開デフォルトは `false` |
+| `exports.doppler_def.source` | string | `downlink` または `uplink`。通常は `downlink` |
+| `exports.doppler_def.transform` | string | 通常は `downlink_minus_base_plus_if` |
+| `exports.doppler_def.if_frequency_hz` | Hz | `.def` 第2列に足すIF周波数。既定例は `70000000` |
+| `exports.doppler_def.rounding` | string | `round` は四捨五入、`floor` は切り捨て。未指定時は `round` |
+
+標準式は `integerize(source_doppler_frequency_hz) - source_base_frequency_hz + if_frequency_hz` です。`integerize()` は `rounding` に従います。旧仕様互換として `transform: legacy_offset` も読めますが、通常の設定では使いません。
 
 現状は全衛星共通です。衛星別周波数が必要な場合は、次の拡張候補です。
 
